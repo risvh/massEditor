@@ -1,3 +1,18 @@
+
+regenerateCache = 0
+regenerateCache_Categories = 0
+regenerateCache_Objects = 1
+regenerateCache_Transitions = 0
+regenerate_depthMap = 0
+
+
+loop_Categories_old = 0
+loop_Categories = 0
+loop_Transitions = 0
+loop_Objects = 1
+
+
+
 from pathlib import Path
 
 def list_dir(folderpath = ".", file = False, folder = False, silent = True):
@@ -26,19 +41,19 @@ def save_json_file(filepath, j):
     with open(filepath, 'w') as f:
         import json
         json.dump(j, f)
-        
+
 def save_pickle_file(filepath, j):
     with open(filepath, 'wb') as f:
         import pickle
         pickle.dump(j, f)
-    
+
 def load_pickle_file(filepath):
     with open(filepath, 'rb') as f:
         import pickle
         j = pickle.load(f)
     return j
-    
-    
+
+
 ################################################################################
 ############################################################# Main #############
 ################################################################################
@@ -70,7 +85,7 @@ class Object(OrderedDict):
         lines = content.splitlines()
         lineNums = OrderedDict()
         lineByTag = OrderedDict()
-        
+
         for lineNum, line in enumerate(lines):
             if line.count("=") == 0:
                 parsed_line = [['name', line]]
@@ -86,9 +101,9 @@ class Object(OrderedDict):
                 parsed_line = [part.split("=", maxsplit=1) for part in new_parts]
             else:
                 parsed_line = [line.split("=", maxsplit=1)]
-            
+
             parsed = [(tag, value, lineNum, line) for tag, value in parsed_line]
-                
+
             for item in parsed:
                 tag, value, lineNum, rawLine = item
                 if tag in self.keys():
@@ -103,7 +118,7 @@ class Object(OrderedDict):
                     self[tag] = value
                     lineNums[tag] = lineNum
                     lineByTag[tag] = rawLine
-            
+
             self.lineNums = lineNums
             self.lines = lines
             self.lineByTag = lineByTag
@@ -167,10 +182,10 @@ class Transition():
 
 
 
-def get_transition_producing(id):
+def get_transition_make(id):
     return list(set(get_transition(None, None, id) + get_transition(None, None, None, id)))
 
-def get_transition_using(id):
+def get_transition_use(id):
     return list(set(get_transition(id) + get_transition(None, id)))
 
 def is_category(id):
@@ -191,22 +206,22 @@ def parse_categories(trans):
     category_bool = [is_category(e) for e in trans[:-1]]
     pattern_bool = [is_pattern(e) for e in trans[:-1]]
     if sum(category_bool) + sum(pattern_bool) == 0: return [trans]
-    
+
     results = [trans]
-    
+
     pattern_items = [[], [], [], []]
     zip_category_items = [[], [], [], []]
     category_items = [[], [], [], []]
-    
+
     pattern_numObj = 0
     if is_pattern(a):
         pattern_numObj = len(get_category_by_id(a))
     elif is_pattern(b):
         pattern_numObj = len(get_category_by_id(b))
-        
+
     zipCat_numObj = 0
     parse_other_category = False
-    
+
     for i, e in enumerate((a, b, c, d)):
         if not is_category(e) and not is_pattern(e): continue
         e_category_list = get_category_by_id(e).copy()
@@ -220,27 +235,27 @@ def parse_categories(trans):
         elif is_category(e):
             category_items[i] = e_category_list
             parse_other_category = True
-    
-    
+
+
     if pattern_numObj > 0:
         for i, items in enumerate(pattern_items):
             if len(items) == 0:
                 pattern_items[i] = [ (a, b, c, d)[i] ] * pattern_numObj
-        
+
         for a2, b2, c2, d2 in zip(*pattern_items):
             results.append( (a2, b2, c2, d2, flag) )
-    
-    
+
+
     if zipCat_numObj > 0:
         results_copy = results.copy()
         for result in results_copy:
             a2, b2, c2, d2, flag2 = result
-            
+
             zip_category_items_copy = zip_category_items.copy()
             for i, items in enumerate(zip_category_items_copy):
                 if len(items) == 0:
                     zip_category_items_copy[i] = [ (a2, b2, c2, d2)[i] ] * zipCat_numObj
-            
+
             for a3, b3, c3, d3 in zip(*zip_category_items_copy):
                 results.append( (a3, b3, c3, d3, flag) )
 
@@ -248,11 +263,11 @@ def parse_categories(trans):
         results_copy = results.copy()
         for result in results_copy:
             a2, b2, c2, d2, flag2 = result
-            
+
             category_items_copy = [ e.copy() for e in category_items ]
             for l, id in zip(category_items_copy, (a2, b2, c2, d2)):
                 l.append(id)
-            
+
             for a3 in category_items_copy[0]:
                 for b3 in category_items_copy[1]:
                     for c3 in category_items_copy[2]:
@@ -269,7 +284,7 @@ def get_transition(a=None, b=None, c=None, d=None):
         newActor, newTarget = item
         if (a is None or a == actor) and (b is None or b == target) and (c is None or c == newActor) and (d is None or d == newTarget):
             results.append( (actor, target, newActor, newTarget, flag) )
-        
+
         probSet_transitions = []
         if is_probSet(newActor):
             for perhaps_newActor in get_category_by_id(newActor):
@@ -312,13 +327,13 @@ def print_simple_trans(trans):
 ################################################################################
 ############################################################# Loading ##########
 ################################################################################
-        
 
 
 
 
 
-        
+
+
 categories = {}
 objects = {}
 names = {}
@@ -329,129 +344,136 @@ transitions_map = {}
 
 
 
-if 0:
-    
+if regenerateCache:
+
     ############################################################# Categories
     
-    path = Path("./categories")
-    files = list_dir(path, file=1)
-    
-    for i, file in enumerate(files):
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        lines = t.splitlines()
-        if len(lines) < 2: continue
-    
-        id = int(file.replace(".txt", ""))
-        list_str = t[t.find("\n", t.find("numObjects="))+1:].splitlines()
-        list_int = [int(e.split()[0]) for e in list_str]
-        category_type = ""
-        if lines[1] in ["pattern", "probSet"]: category_type = lines[1]
-        categories[id] = list_int, category_type
+    if regenerateCache_Categories:
         
-        if i % 500 == 0: print( "Categories:", i, len(files) )
+        path = Path("./categories")
+        files = list_dir(path, file=1)
     
-    ############################################################# Objects
+        for i, file in enumerate(files):
+            if ".txt" not in file: continue
+            t = read_txt(path / file)
+            lines = t.splitlines()
+            if len(lines) < 2: continue
     
-    path = Path("./objects")
-    files = list_dir(path, file=1)
+            id = int(file.replace(".txt", ""))
+            list_str = t[t.find("\n", t.find("numObjects="))+1:].splitlines()
+            list_int = [int(e.split()[0]) for e in list_str]
+            category_type = ""
+            if lines[1] in ["pattern", "probSet"]: category_type = lines[1]
+            categories[id] = list_int, category_type
     
-    for i, file in enumerate(files):
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        if len(t.splitlines()) < 2: continue
-    
-        o = Object(t)
-        id = int( o['id'] )
-        name = o['name']
-        names[id] = name
-        objects[id] = o
+            if i % 500 == 0: print( "Categories:", i, len(files) )
+            
+        save_pickle_file('categories.pickle', categories)
 
-        if i % 500 == 0: print( "Objects:", i, len(files) )
+    ############################################################# Objects
+
+    if regenerateCache_Objects:
+        
+        path = Path("./objects")
+        files = list_dir(path, file=1)
     
+        for i, file in enumerate(files):
+            if ".txt" not in file: continue
+            t = read_txt(path / file)
+            if len(t.splitlines()) < 2: continue
+    
+            o = Object(t)
+            id = int( o['id'] )
+            name = o['name']
+            names[id] = name
+            objects[id] = o
+    
+            if i % 500 == 0: print( "Objects:", i, len(files) )
+        
+        save_pickle_file('objects.pickle', objects)
+        save_pickle_file('names.pickle', names)
+
     ############################################################# Transitions
-    
-    path = Path("./transitions/")
-    files = list_dir(path, file=1)
-    
-    test_dict = {}
-    
-    for i, file in enumerate(files):
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        items = t.split()
-        if len(items) < 2: continue
-    
-        raw_tran = Transition(file, t)
-        transitions_map[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran.c, raw_tran.d
+
+    if regenerateCache_Transitions:
         
-        if i % 500 == 0: print( "Transitions:", i, len(files) )
+        path = Path("./transitions/")
+        files = list_dir(path, file=1)
     
+        for i, file in enumerate(files):
+            if ".txt" not in file: continue
+            t = read_txt(path / file)
+            items = t.split()
+            if len(items) < 2: continue
+    
+            raw_tran = Transition(file, t)
+            transitions_map[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran.c, raw_tran.d
+    
+            if i % 500 == 0: print( "Transitions:", i, len(files) )
+
     ############################################################# Auto-generating Transitions
+
+        transitions_map_copy = transitions_map.copy()
     
-    transitions_map_copy = transitions_map.copy()
+        for key, item in transitions_map_copy.items():
     
-    for key, item in transitions_map_copy.items():
-        
-        actor, target, flag = key
-        newActor, newTarget = item
-        simple_raw_tran = (actor, target, newActor, newTarget, flag)
+            actor, target, flag = key
+            newActor, newTarget = item
+            simple_raw_tran = (actor, target, newActor, newTarget, flag)
     
-        trans = parse_categories(simple_raw_tran)
-        if len(trans) == 1: continue
+            trans = parse_categories(simple_raw_tran)
+            if len(trans) == 1: continue
     
-        for tran in trans:
-            a, b, c, d, flag = tran
-            if (a, b, flag) not in transitions_map.keys():
-                transitions_map[a, b, flag] = c, d
-    
+            for tran in trans:
+                a, b, c, d, flag = tran
+                if (a, b, flag) not in transitions_map.keys():
+                    transitions_map[a, b, flag] = c, d
+                    
+        save_pickle_file('transitions_map.pickle', transitions_map)
+
     ############################################################# Generating Object Depth Map
 
     natural_objects = {key:value for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000'}
-    horizon = list(natural_objects.keys())
     
-    for id in natural_objects.keys():
-        depths[id] = 0
-    depths[0] = 0
-    depths[-1] = 0
-    depths[-2] = 0
+    if regenerate_depthMap:
     
-    i = 0
-    while len(horizon) > 0:
+        horizon = list(natural_objects.keys())
+
+        for id in natural_objects.keys():
+            depths[id] = 0
+        depths[0] = 0
+        depths[-1] = 0
+        depths[-2] = 0
+    
+        i = 0
+        while len(horizon) > 0:
+    
+            id = horizon.pop(0)
+            if i % 500 == 0: print( f"{len(depths.keys())} / {len(objects.keys())}, horizon: {len(horizon)}, id: {id}" )
+            i += 1
+    
+            trans = get_transition_use(id)
+            for tran in trans:
+                a, b, c, d, flag = tran
+                if a in depths.keys() and b in depths.keys():
+                    next_depth = max( depths[a], depths[b] ) + 1
+                    if c not in depths.keys():
+                        depths[c] = next_depth
+                        if c > 0: horizon.append(c)
+                    if d not in depths.keys():
+                        depths[d] = next_depth
+                        if d > 0: horizon.append(d)
         
-        id = horizon.pop(0)
-        if i % 500 == 0: print( f"{len(depths.keys())} / {len(objects.keys())}, horizon: {len(horizon)}, id: {id}" )
-        i += 1
-        
-        trans = get_transition_using(id)
-        for tran in trans:
-            a, b, c, d, flag = tran
-            if a in depths.keys() and b in depths.keys():
-                next_depth = max( depths[a], depths[b] ) + 1
-                if c not in depths.keys(): 
-                    depths[c] = next_depth
-                    if c > 0: horizon.append(c)
-                if d not in depths.keys(): 
-                    depths[d] = next_depth
-                    if d > 0: horizon.append(d)
+        save_pickle_file('depths.pickle', depths)
 
-
-    save_pickle_file('categories.pickle', categories)    
-    save_pickle_file('objects.pickle', objects)
-    save_pickle_file('depths.pickle', depths)
-    save_pickle_file('names.pickle', names)
-    save_pickle_file('transitions_map.pickle', transitions_map)
-
-    print( "\nDONE LOADING\n" )
-
-else:
-    categories = load_pickle_file('categories.pickle')
-    objects = load_pickle_file('objects.pickle')
-    depths = load_pickle_file('depths.pickle')
-    names = load_pickle_file('names.pickle')
-    transitions_map = load_pickle_file('transitions_map.pickle')
     
-    print( "\nDONE LOADING PICKLES\n" )
+if len(categories) == 0: categories = load_pickle_file('categories.pickle')
+if len(objects) == 0: objects = load_pickle_file('objects.pickle')
+if len(depths) == 0: depths = load_pickle_file('depths.pickle')
+if len(names) == 0: names = load_pickle_file('names.pickle')
+if len(transitions_map) == 0: transitions_map = load_pickle_file('transitions_map.pickle')
+
+print( "\nDONE LOADING\n" )
 
 
 
@@ -464,10 +486,10 @@ def search_objects_by_name(querystr):
         for query in query_list:
             if query[0] == '-':
                 query = query[1:]
-                if query.lower() in name.lower(): 
+                if query.lower() in name.lower():
                     mismatch = True
                     break
-            elif query.lower() not in name.lower(): 
+            elif query.lower() not in name.lower():
                 mismatch = True
                 break
         if mismatch: continue
@@ -482,45 +504,53 @@ def search_objects_by_name(querystr):
 ################################################################################
 ############################################################# Categories #######
 ################################################################################
-        
-if 0:
+
+if loop_Categories_old:
 
     path = Path("./categories")
     files = list_dir(path, file=1)
-    
+
     results = []
-    
+
     for file in files:
         if ".txt" not in file: continue
         t = read_txt(path / file)
         lines = t.splitlines()
         if len(lines) < 2: continue
-        
+
         id = file.replace(".txt", "")
         # name = lines[1]
-        
+
         parentID = 0
-        
+
         for num, line in enumerate(lines):
             if "parentID=" in line:
                 parentID = line.replace("parentID=", "")
                 break
-        
+
         if lines[1] == 'pattern':
             mode = "pattern"
         elif lines[1] == 'probSet':
             mode = "probSet"
         else:
             mode = "category"
-        
+
         # parentName = objects[id][None]
-        
+
         # @ = None
         # None = pattern
         # Perhaps = probSet
-        
+
         # if "#" in parentName:
         #     print(id, mode, parentName)
+
+
+if loop_Categories:
+
+    for id, c in categories.items():
+        items, catType = c
+        if 3760 in items:
+            print(id, objects[id]['name'])
 
 
 ################################################################################
@@ -530,87 +560,125 @@ if 0:
 
 
 
-if 0:
-    
+if loop_Transitions and 0:
+
     path = Path("./transitions/")
     files = list_dir(path, file=1)
-    
+
     i = 0
     for file in files:
         if ".txt" not in file: continue
         t = read_txt(path / file)
         items = t.split()
         if len(items) < 2: continue
-        
+
         actor = int(file.replace(".txt", "").split("_")[0])
         target = int(file.replace(".txt", "").split("_")[1])
         new_actor = int(items[0])
         new_target = int(items[1])
-        
+
         # decay_time = items[2]
         # move = '0'
         # if len(items) > 7: move = items[7]
-
+        
+        
+if loop_Transitions:
+        
+    t1s = get_transition(0, None)
+    for t1 in t1s:
+        if t1[3] != 0: continue
+        if t1[2] == 0: continue
+    
+        o = objects[t1[2]]
+        numSlots = int(o['numSlots'].split('#')[0])
+        if numSlots > 0: continue
+        
+        t2s = get_transition(t1[2], -1, 0)
+        if len(t2s) == 0: continue
+        print(t1[1], names[t1[1]])
 
 ################################################################################
 ############################################################# Objects ##########
 ################################################################################
 
 
-if 1:
+def craftingGuide(id):
+    print("\n")
+    print("MAKE")
+    print("\n")
+    for t in get_transition_make(id):
+        print(str(t))
+        print_simple_trans(t)
+    print("\n")
+    print("USE")
+    print("\n")
+    for t in get_transition_use(id):
+        print(str(t))
+        print_simple_trans(t)
+
+
+if loop_Objects:
 
     rawStr = """
-8419
-8420
-8423
-8424
-8474
-8475
-8416
-8417
-8425
-8426
-8476
-8477
-8400
-8401
-8421
-8422
-8472
-8473
+12453
+12454
+12744
+12745
+7769
+7798
     """.strip()
-    # files = [f"{e}.txt" for e in rawStr.splitlines()]
-    
-    
-    uncraftables = list(objects.keys() - depths.keys())
-    files = [f"{e}.txt" for e in uncraftables]
-    
-    path = Path("./objects")
+    files = [f"{e}.txt" for e in rawStr.splitlines()]
+
+
+    # uncraftables = list(objects.keys() - depths.keys())
+    # files = [f"{e}.txt" for e in uncraftables]
+
+    # path = Path("./objects")
     # files = list_dir(path, file=1)
-    
-    for file in files:
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        if len(t.splitlines()) < 2: continue
-        
-        o = Object(t)
+
+    # for file in files:
+    #     if ".txt" not in file: continue
+    #     t = read_txt(path / file)
+    #     if len(t.splitlines()) < 2: continue
+
+    #     o = Object(t)
+
+    for o in objects.values():
+
         id = o['id']
         name = o['name']
-        
+
         permanent = o['permanent'] == '1'
         blocking = o['blocksWalking'] == '1'
         
+        boolean = True
+        
+            
+
+        orName = [
+            
+            ]
+
+        andName = [
+            "Firewood"
+            ]
+
         infos = [
             id,
             name
             ]
-        
-        if "Pipe" in name:
-        
-            print("\t".join([str(e) for e in infos]))
-            
-                
-            # save_txt(t, path / f"{id}.txt")
 
+        orName_bool = (sum([1 if e in name else 0 for e in orName]) > 0) if len(orName) > 0 else True
+        andName_bool = (sum([0 if e in name else 1 for e in andName]) == 0) if len(andName) > 0 else True
+        if not boolean or not (orName_bool and andName_bool): continue
         
+        print("\t".join([str(e) for e in infos]))
         
+        if 1:
+
+            t = o.change('name', name.replace(" +tapoutTrigger,1,1,1,1", ""))
+
+            o.save()
+
+
+
