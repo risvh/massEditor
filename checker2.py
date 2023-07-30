@@ -1,10 +1,9 @@
 
-regenerateCache = 1
-regenerateCache_Categories = 0
-regenerateCache_Objects = 0
+regenerateCacheMode = 0
+regenerateCache_Categories = 1
+regenerateCache_Objects = 1
 regenerateCache_Transitions = 1
-regenerate_depthMap = 1
-
+regenerate_depthMap = 0
 
 loop_Categories_old = 0
 loop_Categories = 0
@@ -12,11 +11,24 @@ loop_Transitions = 0
 loop_Objects = 0
 
 
+if regenerateCacheMode == 1:
+    regenerateCache_Categories = 1
+    regenerateCache_Objects = 1
+    regenerateCache_Transitions = 1
+    regenerate_depthMap = 1
+elif regenerateCacheMode == 0:
+    pass
+elif regenerateCacheMode == -1:
+    regenerateCache_Categories = 0
+    regenerateCache_Objects = 0
+    regenerateCache_Transitions = 0
+    regenerate_depthMap = 0
+    
 
+import os
 from pathlib import Path
 
 def list_dir(folderpath = ".", file = False, folder = False, silent = True):
-    import os
     results = []
     for filename in os.listdir(folderpath):
         fullpath = os.path.join(folderpath, filename)
@@ -144,8 +156,10 @@ class Object(OrderedDict):
         save_txt(content, path / f"{id}.txt")
 
 class Transition(tuple):
+    def __new__(cls, *args):
+        if len(args) > 1: return super().__new__(cls, args)
+        return super().__new__(cls, *args)
     def __init__(self, *args):
-        if len(args) == 1 and type(args[0]) is list: args = args[0]
         args = list(args)
         defaults = [None, None, None, None, "", None, "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
         for i in range(len(args), 14):
@@ -164,10 +178,10 @@ class Transition(tuple):
             self.noUseTargetFlag
          ] = args
     def __repr__(self):
-        return str((self.a, self.b, self.c, self.d))
-    def pprint(self):
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
-        print( f"{self.__repr__()}\t{a_name} + {b_name} = {c_name} + {d_name}")
+        return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
+    def pprint(self):
+        print( self.__repr() )
     
     @classmethod
     def load(cls, filename, content):
@@ -179,11 +193,36 @@ class Transition(tuple):
         actor, target, newActor, newTarget = [int(e) for e in (actor, target, newActor, newTarget)]
         flag = ""
         if len(filename_items) > 2: flag = filename_items[2]
-        return cls([actor, target, newActor, newTarget, flag, *items[2:]])
+        return cls(actor, target, newActor, newTarget, flag, *items[2:])
 
 class ListOfTransitions(list):
     def pprint(self):
         for t in self: t.pprint()
+        
+    def filter(self, querystr):
+        query_list = querystr.split()
+        results = ListOfTransitions()
+        for transition in self:
+            transition_str = str(transition)
+            mismatch = False
+            for query in query_list:
+                if query[0] == '-':
+                    query = query[1:]
+                    if query.lower() in transition_str.lower(): 
+                        mismatch = True
+                        break
+                elif query.lower() not in transition_str.lower(): 
+                    mismatch = True
+                    break
+            if mismatch: continue
+            results.append(transition)
+        self[:] = results
+        
+    def delete(self):
+        path = Path("./transitions/")
+        for transition in self:
+            f = f"{transition.a}_{transition.b}.txt"
+            Path(path/f).unlink(missing_ok=True)
     
     
 class ListOfObjects(list):
@@ -191,41 +230,54 @@ class ListOfObjects(list):
         r = []
         for e in self:
             if e in names.keys():
-                r.append( f"{str(e)}\t{names[e]}" )
+                r.append( f"{str(e):<8}{names[e]}" )
             else:
-                r.append( f"{str(e)}\t" )
+                r.append( f"{str(e):<8}" )
         return "\n".join(r)
     def filter(self, querystr):
         return search_objects_by_name(querystr, self)
 
+class Category(ListOfObjects):
+    @classmethod
+    def load(self, filename, content):
+        lines = content.splitlines()
+        list_str = content[content.find("\n", content.find("numObjects="))+1:].splitlines()
+        list_int = [int(e.split()[0]) for e in list_str]
+        category_type = ""
+        if lines[1] in ["pattern", "probSet"]: category_type = lines[1]
+        result = Category(list_int)
+        result.type = category_type
+        return result
+        
+        
 
 
+def make(id):
+    return ListOfTransitions(set(get_transition(None, None, id) + get_transition(None, None, None, id)))
 
-
-def get_transition_make(id):
-    return list(set(get_transition(None, None, id) + get_transition(None, None, None, id)))
-
-def get_transition_use(id):
-    return list(set(get_transition(id) + get_transition(None, id)))
+def use(id):
+    return ListOfTransitions(set(get_transition(id) + get_transition(None, id)))
 
 def is_category(id):
-    return id in categories.keys() and not categories[id][1] == 'pattern' and not categories[id][1] == 'probSet'
+    return id in categories.keys() and not categories[id].type == 'pattern' and not categories[id].type == 'probSet'
 
 def is_pattern(id):
-    return id in categories.keys() and categories[id][1] == 'pattern'
+    return id in categories.keys() and categories[id].type == 'pattern'
 
 def is_probSet(id):
-    return id in categories.keys() and categories[id][1] == 'probSet'
+    return id in categories.keys() and categories[id].type == 'probSet'
 
 def get_category_by_id(id):
-    return categories[id][0]
+    return categories[id]
 
 
 def parse_categories(trans):
+    other_parts = trans[5:]
+    trans = trans[:5]
     a, b, c, d, flag = trans
     category_bool = [is_category(e) for e in trans[:-1]]
     pattern_bool = [is_pattern(e) for e in trans[:-1]]
-    if sum(category_bool) + sum(pattern_bool) == 0: return [trans]
+    if sum(category_bool) + sum(pattern_bool) == 0: return [Transition(*(trans + other_parts))]
 
     results = [trans]
 
@@ -269,7 +321,7 @@ def parse_categories(trans):
     if zipCat_numObj > 0:
         results_copy = results.copy()
         for result in results_copy:
-            a2, b2, c2, d2, flag2 = result
+            a2, b2, c2, d2, flag2 = result[:5]
 
             zip_category_items_copy = zip_category_items.copy()
             for i, items in enumerate(zip_category_items_copy):
@@ -282,7 +334,7 @@ def parse_categories(trans):
     if parse_other_category:
         results_copy = results.copy()
         for result in results_copy:
-            a2, b2, c2, d2, flag2 = result
+            a2, b2, c2, d2, flag2 = result[:5]
 
             category_items_copy = [ e.copy() for e in category_items ]
             for l, id in zip(category_items_copy, (a2, b2, c2, d2)):
@@ -294,24 +346,59 @@ def parse_categories(trans):
                         for d3 in category_items_copy[3]:
                             if (a3, b3, c3, d3, flag) not in results:
                                 results.append( (a3, b3, c3, d3, flag) )
+    
+    for i, result in enumerate(results):
+        results[i] = Transition( *(result + other_parts) )
     return results
 
 
+
+
+def search_objects_by_name(querystr, pool=None):
+    query_list = querystr.split()
+    results = ListOfObjects()
+    if pool is None: pool = names.keys()
+    for id in pool:
+        name = names[id]
+        mismatch = False
+        for query in query_list:
+            if query[0] == '-':
+                query = query[1:]
+                if query.lower() in name.lower(): 
+                    mismatch = True
+                    break
+            elif query.lower() not in name.lower(): 
+                mismatch = True
+                break
+        if mismatch: continue
+        results.append(id)
+    return results
+
 def get_transition(a=None, b=None, c=None, d=None):
-    results = []
-    for key, item in transitions_map.items():
-        actor, target, flag = key
-        newActor, newTarget = item
+    results = ListOfTransitions()
+    
+    if a is not None and b is not None:
+        results.append(transitions[a, b, ""])
+        return results
+    
+    for tran in transitions.values():
+        actor, target, newActor, newTarget, flag = tran[:5]
         if (a is None or a == actor) and (b is None or b == target) and (c is None or c == newActor) and (d is None or d == newTarget):
-            results.append( Transition(actor, target, newActor, newTarget, flag) )
+            results.append( tran )
         
         probSet_transitions = []
         if is_probSet(newActor):
             for perhaps_newActor in get_category_by_id(newActor):
-                probSet_transitions.append( Transition(actor, target, perhaps_newActor, newTarget, flag) )
+                new_tran = list(tran)
+                new_tran[2] = perhaps_newActor
+                new_tran = Transition( new_tran )
+                probSet_transitions.append( new_tran )
         elif is_probSet(newTarget):
             for perhaps_newTarget in get_category_by_id(newTarget):
-                probSet_transitions.append( Transition(actor, target, newActor, perhaps_newTarget, flag) )
+                new_tran = list(tran)
+                new_tran[3] = perhaps_newTarget
+                new_tran = Transition( new_tran )
+                probSet_transitions.append( new_tran )
         for probSet_transition in probSet_transitions:
             if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
                 results.append( probSet_transition )
@@ -325,17 +412,12 @@ def get_transition(a=None, b=None, c=None, d=None):
 
 
 
+    
 
 
 
 
 
-
-
-
-def print_simple_trans(trans):
-    a_name, b_name, c_name, d_name = [ read_object_name_by_id(e) for e in trans[:-1] ]
-    print( f"{a_name} + {b_name} = {c_name} + {d_name}")
 
 
 
@@ -357,10 +439,8 @@ def print_simple_trans(trans):
 categories = {}
 objects = {}
 names = {}
+transitions = {}
 depths = {}
-transitions_map = {}
-
-
 
 
 
@@ -380,11 +460,7 @@ if regenerateCache_Categories:
         if len(lines) < 2: continue
 
         id = int(file.replace(".txt", ""))
-        list_str = t[t.find("\n", t.find("numObjects="))+1:].splitlines()
-        list_int = [int(e.split()[0]) for e in list_str]
-        category_type = ""
-        if lines[1] in ["pattern", "probSet"]: category_type = lines[1]
-        categories[id] = list_int, category_type
+        categories[id] = Category.load(file, t)
 
         if i % 500 == 0: print( "Categories:", i, len(files) )
         
@@ -434,32 +510,28 @@ if regenerateCache_Transitions:
         if len(items) < 2: continue
 
         raw_tran = Transition.load(file, t)
-        transitions_map[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran.c, raw_tran.d
+        transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
 
         if i % 500 == 0: print( "Transitions:", i, len(files) )
 
 ############################################################# Auto-generating Transitions
 
-    transitions_map_copy = transitions_map.copy()
+    transitions_copy = transitions.copy()
 
-    for key, item in transitions_map_copy.items():
+    for raw_tran in transitions_copy.values():
 
-        actor, target, flag = key
-        newActor, newTarget = item
-        simple_raw_tran = (actor, target, newActor, newTarget, flag)
-
-        trans = parse_categories(simple_raw_tran)
+        trans = parse_categories(raw_tran)
         if len(trans) == 1: continue
 
         for tran in trans:
-            a, b, c, d, flag = tran
-            if (a, b, flag) not in transitions_map.keys():
-                transitions_map[a, b, flag] = c, d
+            a, b, c, d, flag = tran[:5]
+            if (a, b, flag) not in transitions.keys():
+                transitions[a, b, flag] = tran
                 
-    save_pickle_file('transitions_map.pickle', transitions_map)
+    save_pickle_file('transitions.pickle', transitions)
     
 else:
-    transitions_map = load_pickle_file('transitions_map.pickle')
+    transitions = load_pickle_file('transitions.pickle')
 
 ############################################################# Generating Object Depth Map
 
@@ -482,17 +554,16 @@ if regenerate_depthMap:
         if i % 500 == 0: print( f"{len(depths.keys())} / {len(objects.keys())}, horizon: {len(horizon)}, id: {id}" )
         i += 1
 
-        trans = get_transition_use(id)
+        trans = use(id)
         for tran in trans:
             a, b, c, d, flag = tran
             if a in depths.keys() and b in depths.keys():
                 next_depth = max( depths[a], depths[b] ) + 1
-                if c not in depths.keys():
-                    depths[c] = next_depth
-                    if c > 0: horizon.append(c)
-                if d not in depths.keys():
-                    depths[d] = next_depth
-                    if d > 0: horizon.append(d)
+                if c > 0 and c not in depths.keys(): horizon.append(c)
+                if d > 0 and d not in depths.keys(): horizon.append(d)
+                depths[c] = next_depth if c not in depths.keys() else min(depths[c], next_depth)
+                depths[d] = next_depth if d not in depths.keys() else min(depths[d], next_depth)
+                    
     
     save_pickle_file('depths.pickle', depths)
 
@@ -506,25 +577,10 @@ print( "\nDONE LOADING\n" )
 
 
 
-def search_objects_by_name(querystr, pool = None):
-    query_list = querystr.split()
-    results = ListOfObjects()
-    if pool is None: pool = names.keys()
-    for id in pool:
-        name = names[id]
-        mismatch = False
-        for query in query_list:
-            if query[0] == '-':
-                query = query[1:]
-                if query.lower() in name.lower(): 
-                    mismatch = True
-                    break
-            elif query.lower() not in name.lower(): 
-                mismatch = True
-                break
-        if mismatch: continue
-        results.append(id)
-    return results
+
+
+
+
 
 
 
@@ -633,18 +689,19 @@ if loop_Transitions:
 
 
 def craftingGuide(id):
-    print("\n")
-    print("MAKE")
-    print("\n")
-    for t in get_transition_make(id):
-        print(str(t))
-        print_simple_trans(t)
-    print("\n")
-    print("USE")
-    print("\n")
-    for t in get_transition_use(id):
-        print(str(t))
-        print_simple_trans(t)
+    a = make(id)
+    b = use(id)
+    if len(a) > 0:
+        print("\n")
+        print("MAKE")
+        print("\n")
+        for t in a: print(t)
+    if len(b) > 0:
+        print("\n")
+        print("USE")
+        print("\n")
+        for t in b: print(t)
+    return a + b
 
 
 if loop_Objects:
