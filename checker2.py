@@ -136,10 +136,11 @@ class Object(OrderedDict):
             self.lineByTag = lineByTag
     def change(self, tag, value, index=None):
         lineNum = self.lineNums[tag]
-        if self[tag] is list and index is not None:
+        if type(self[tag]) is list and index is not None:
             oldValue = self[tag][index]
             self[tag][index] = value
-        elif self[tag] is not list:
+            lineNum = lineNum[index]
+        elif type(self[tag]) is not list:
             oldValue = self[tag]
             self[tag] = value
         else:
@@ -575,17 +576,19 @@ else:
 print( "\nDONE LOADING\n" )
 
 
+r = ListOfObjects()
 
-
-
-
-
-
-
-
-
-
-
+for id, o in objects.items():
+    if '3052' in o['spriteID']:
+        r.append(id)
+        
+# 1/0
+        
+for oid in r:
+    o = objects[oid]
+    o.change('blocksWalking', 1)
+    o.save()
+        
 
 ################################################################################
 ############################################################# Categories #######
