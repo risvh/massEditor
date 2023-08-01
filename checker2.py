@@ -1,5 +1,5 @@
 
-regenerateCacheMode = 0
+regenerateCacheMode = -1
 regenerateCache_Categories = 1
 regenerateCache_Objects = 1
 regenerateCache_Transitions = 1
@@ -183,6 +183,17 @@ class Transition(tuple):
         return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
     def pprint(self):
         print( self.__repr() )
+        
+    def save(self):
+        if self.a is None or self.b is None or self.c is None or self.d is None: return
+        filename_flag = ""
+        if self.flag != "": filename_flag = f"_{self.flag}"
+        filename = f"{self.a}_{self.b}{filename_flag}.txt"
+        content_list = self[2:4] + self[5:]
+        content_list = [str(e) for e in content_list]
+        content = " ".join(content_list)
+        path = Path("./transitions/")
+        save_txt(content, path/filename)
     
     @classmethod
     def load(cls, filename, content):
@@ -207,7 +218,7 @@ class ListOfTransitions(list):
             transition_str = str(transition)
             mismatch = False
             for query in query_list:
-                if query[0] == '-':
+                if query[0] == '-' and query != '-1':
                     query = query[1:]
                     if query.lower() in transition_str.lower(): 
                         mismatch = True
@@ -236,7 +247,7 @@ class ListOfObjects(list):
                 r.append( f"{str(e):<8}" )
         return "\n".join(r)
     def filter(self, querystr):
-        return search_objects_by_name(querystr, self)
+        self[:] = search_objects_by_name(querystr, self)
 
 class Category(ListOfObjects):
     @classmethod
@@ -582,12 +593,20 @@ for id, o in objects.items():
     if '3052' in o['spriteID']:
         r.append(id)
         
-# 1/0
-        
-for oid in r:
-    o = objects[oid]
-    o.change('blocksWalking', 1)
-    o.save()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         
 
 ################################################################################
@@ -769,6 +788,5 @@ if loop_Objects:
             t = o.change('name', name.replace(" +tapoutTrigger,1,1,1,1", ""))
 
             o.save()
-
 
 
