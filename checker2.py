@@ -5,11 +5,6 @@ regenerateCache_Objects = 1
 regenerateCache_Transitions = 1
 regenerate_depthMap = 0
 
-loop_Categories_old = 0
-loop_Categories = 0
-loop_Transitions = 0
-loop_Objects = 0
-
 
 if regenerateCacheMode == 1:
     regenerateCache_Categories = 1
@@ -92,6 +87,19 @@ def read_object_name_by_id(id):
 
 from collections import OrderedDict
 
+class Pos(list):
+    def __add__(self, other):
+        return Pos(self[0] + other[0], self[1] + other[1])
+    def __sub__(self, other):
+        return Pos(self[0] - other[0], self[1] - other[1])
+    def __init__(self, *args):
+        if len(args) == 1 and type(args[0]) is str:
+            self[:] = [float(e) for e in args[0].split(',')]
+        else:
+            self[:] = args            
+    def __repr__(self):
+        return f"{self[0]:.6f},{self[1]:.6f}"
+
 class Object(OrderedDict):
     def __init__(self, content = ""):
         lines = content.splitlines()
@@ -109,7 +117,7 @@ class Object(OrderedDict):
                     if "=" in part:
                         new_parts.append(part)
                     else:
-                        new_parts[-1] += part
+                        new_parts[-1] += (',' + part)
                 parsed_line = [part.split("=", maxsplit=1) for part in new_parts]
             else:
                 parsed_line = [line.split("=", maxsplit=1)]
@@ -131,9 +139,9 @@ class Object(OrderedDict):
                     lineNums[tag] = lineNum
                     lineByTag[tag] = rawLine
 
-            self.lineNums = lineNums
-            self.lines = lines
-            self.lineByTag = lineByTag
+        self.lineNums = lineNums
+        self.lines = lines
+        self.lineByTag = lineByTag
     def change(self, tag, value, index=None):
         lineNum = self.lineNums[tag]
         if type(self[tag]) is list and index is not None:
@@ -235,7 +243,9 @@ class ListOfTransitions(list):
         for transition in self:
             f = f"{transition.a}_{transition.b}.txt"
             Path(path/f).unlink(missing_ok=True)
-    
+            
+    def raw(self):
+        self[:] = ListOfTransitions([t for t in self if (t.a, t.b, t.flag) in raw_transitions])
     
 class ListOfObjects(list):
     def __repr__(self):
@@ -258,6 +268,8 @@ class Category(ListOfObjects):
         category_type = ""
         if lines[1] in ["pattern", "probSet"]: category_type = lines[1]
         result = Category(list_int)
+        id_str = lines[0].replace("parentID=", "")
+        result.parentID = int(id_str)
         result.type = category_type
         return result
         
@@ -403,40 +415,33 @@ def get_transition(a=None, b=None, c=None, d=None):
             for perhaps_newActor in get_category_by_id(newActor):
                 new_tran = list(tran)
                 new_tran[2] = perhaps_newActor
-                new_tran = Transition( new_tran )
+                new_tran = Transition( *new_tran )
                 probSet_transitions.append( new_tran )
         elif is_probSet(newTarget):
             for perhaps_newTarget in get_category_by_id(newTarget):
                 new_tran = list(tran)
                 new_tran[3] = perhaps_newTarget
-                new_tran = Transition( new_tran )
+                new_tran = Transition( *new_tran )
                 probSet_transitions.append( new_tran )
         for probSet_transition in probSet_transitions:
             if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
                 results.append( probSet_transition )
     return results
 
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
+def craftingGuide(id):
+    a = make(id)
+    b = use(id)
+    if len(a) > 0:
+        print("\n")
+        print("MAKE")
+        print("\n")
+        for t in a: print(t)
+    if len(b) > 0:
+        print("\n")
+        print("USE")
+        print("\n")
+        for t in b: print(t)
+    return a + b
 
 ################################################################################
 ############################################################# Loading ##########
@@ -452,6 +457,7 @@ categories = {}
 objects = {}
 names = {}
 transitions = {}
+raw_transitions = {}
 depths = {}
 
 
@@ -529,6 +535,7 @@ if regenerateCache_Transitions:
 ############################################################# Auto-generating Transitions
 
     transitions_copy = transitions.copy()
+    raw_transitions = transitions.copy()
 
     for raw_tran in transitions_copy.values():
 
@@ -541,9 +548,11 @@ if regenerateCache_Transitions:
                 transitions[a, b, flag] = tran
                 
     save_pickle_file('transitions.pickle', transitions)
+    save_pickle_file('raw_transitions.pickle', raw_transitions)
     
 else:
     transitions = load_pickle_file('transitions.pickle')
+    raw_transitions = load_pickle_file('raw_transitions.pickle')
 
 ############################################################# Generating Object Depth Map
 
@@ -568,7 +577,7 @@ if regenerate_depthMap:
 
         trans = use(id)
         for tran in trans:
-            a, b, c, d, flag = tran
+            a, b, c, d, flag = tran[:5]
             if a in depths.keys() and b in depths.keys():
                 next_depth = max( depths[a], depths[b] ) + 1
                 if c > 0 and c not in depths.keys(): horizon.append(c)
@@ -583,210 +592,28 @@ else:
     depths = load_pickle_file('depths.pickle')
     
 
+uncraftables = list(objects.keys() - depths.keys())
+
+for oid, o in objects.items():
+    o.name = o['name']
+    o.id = int(o['id'])
+    if oid in uncraftables:
+        o.uncraftable = True
+    else:
+        o.uncraftable = False
 
 print( "\nDONE LOADING\n" )
 
 
 r = ListOfObjects()
 
-for id, o in objects.items():
-    if '3052' in o['spriteID']:
-        r.append(id)
+for oid, o in objects.items():
+    sprites = o['spriteID']
+    if '100351' in sprites or '100352' in sprites:
+        r.append(oid)
         
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-################################################################################
-############################################################# Categories #######
-################################################################################
-
-if loop_Categories_old:
-
-    path = Path("./categories")
-    files = list_dir(path, file=1)
-
-    results = []
-
-    for file in files:
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        lines = t.splitlines()
-        if len(lines) < 2: continue
-
-        id = file.replace(".txt", "")
-        # name = lines[1]
-
-        parentID = 0
-
-        for num, line in enumerate(lines):
-            if "parentID=" in line:
-                parentID = line.replace("parentID=", "")
-                break
-
-        if lines[1] == 'pattern':
-            mode = "pattern"
-        elif lines[1] == 'probSet':
-            mode = "probSet"
-        else:
-            mode = "category"
-
-        # parentName = objects[id][None]
-
-        # @ = None
-        # None = pattern
-        # Perhaps = probSet
-
-        # if "#" in parentName:
-        #     print(id, mode, parentName)
-
-
-if loop_Categories:
-
-    for id, c in categories.items():
-        items, catType = c
-        if 3760 in items:
-            print(id, objects[id]['name'])
-
-
-################################################################################
-############################################################# Transitions ######
-################################################################################
-
-
-
-
-if loop_Transitions and 0:
-
-    path = Path("./transitions/")
-    files = list_dir(path, file=1)
-
-    i = 0
-    for file in files:
-        if ".txt" not in file: continue
-        t = read_txt(path / file)
-        items = t.split()
-        if len(items) < 2: continue
-
-        actor = int(file.replace(".txt", "").split("_")[0])
-        target = int(file.replace(".txt", "").split("_")[1])
-        new_actor = int(items[0])
-        new_target = int(items[1])
-
-        # decay_time = items[2]
-        # move = '0'
-        # if len(items) > 7: move = items[7]
-        
-        
-if loop_Transitions:
-        
-    t1s = get_transition(0, None)
-    for t1 in t1s:
-        if t1[3] != 0: continue
-        if t1[2] == 0: continue
-    
-        o = objects[t1[2]]
-        numSlots = int(o['numSlots'].split('#')[0])
-        if numSlots > 0: continue
-        
-        t2s = get_transition(t1[2], -1, 0)
-        if len(t2s) == 0: continue
-        print(t1[1], names[t1[1]])
-
-################################################################################
-############################################################# Objects ##########
-################################################################################
-
-
-def craftingGuide(id):
-    a = make(id)
-    b = use(id)
-    if len(a) > 0:
-        print("\n")
-        print("MAKE")
-        print("\n")
-        for t in a: print(t)
-    if len(b) > 0:
-        print("\n")
-        print("USE")
-        print("\n")
-        for t in b: print(t)
-    return a + b
-
-
-if loop_Objects:
-
-    rawStr = """
-12453
-12454
-12744
-12745
-7769
-7798
-    """.strip()
-    files = [f"{e}.txt" for e in rawStr.splitlines()]
-
-
-    # uncraftables = list(objects.keys() - depths.keys())
-    # files = [f"{e}.txt" for e in uncraftables]
-
-    # path = Path("./objects")
-    # files = list_dir(path, file=1)
-
-    # for file in files:
-    #     if ".txt" not in file: continue
-    #     t = read_txt(path / file)
-    #     if len(t.splitlines()) < 2: continue
-
-    #     o = Object(t)
-
-    for o in objects.values():
-
-        id = o['id']
-        name = o['name']
-
-        permanent = o['permanent'] == '1'
-        blocking = o['blocksWalking'] == '1'
-        
-        boolean = True
-        
-            
-
-        orName = [
-            
-            ]
-
-        andName = [
-            "Firewood"
-            ]
-
-        infos = [
-            id,
-            name
-            ]
-
-        orName_bool = (sum([1 if e in name else 0 for e in orName]) > 0) if len(orName) > 0 else True
-        andName_bool = (sum([0 if e in name else 1 for e in andName]) == 0) if len(andName) > 0 else True
-        if not boolean or not (orName_bool and andName_bool): continue
-        
-        print("\t".join([str(e) for e in infos]))
-        
-        if 1:
-
-            t = o.change('name', name.replace(" +tapoutTrigger,1,1,1,1", ""))
-
-            o.save()
+for oid in r:
+    o = objects[oid]
+    print(oid, o['sounds'], o.name, )
 
 
