@@ -1,23 +1,16 @@
-
-regenerateCacheMode = -1
-regenerateCache_Categories = 1
-regenerateCache_Objects = 1
-regenerateCache_Transitions = 1
-regenerate_depthMap = 0
+options = []
 
 
-if regenerateCacheMode == 1:
-    regenerateCache_Categories = 1
-    regenerateCache_Objects = 1
-    regenerateCache_Transitions = 1
-    regenerate_depthMap = 1
-elif regenerateCacheMode == 0:
-    pass
-elif regenerateCacheMode == -1:
-    regenerateCache_Categories = 0
-    regenerateCache_Objects = 0
-    regenerateCache_Transitions = 0
-    regenerate_depthMap = 0
+#options.append("regenerate_all")
+#options.append("regenerate_categories")
+#options.append("regenerate_objects")
+#options.append("regenerate_transitions")
+#options.append("regenerate_depths")
+
+
+
+
+
     
 
 import os
@@ -163,12 +156,78 @@ class Object(OrderedDict):
         id = self['id']
         path = Path("./objects")
         save_txt(content, path / f"{id}.txt")
+    
+        # first to last
+        # back to front
+        # 0 to N
+    
+    def getSpriteLines(self, index_start, index_end = None):
+        if index_end is None: index_end = index_start + 1
+        a = self.lineNums['spriteID'][index_start]
+        if index_end >= int(self['numSprites']):
+            b = self.lineNums['headIndex']
+        else:
+            b = self.lineNums['spriteID'][index_end]
+        return self.lines[a:b]
+    
+    def insertSprites(self, index, new_content):
+        if type(new_content) is str: new_content = new_content.split("\n")
+        old_numSprites = self['numSprites']
+        partiral_object = Object( "\n".join(new_content) )
+        if type(partiral_object['spriteID']) is str:
+            extra_numSprites = 1
+        else:
+            extra_numSprites = len(partiral_object['spriteID'])
+        new_numSprites = str( int(old_numSprites) + extra_numSprites )
+        self.change("numSprites", new_numSprites)
+        
+        parents = self['parent']
+        if type(parents) is list:
+            for i, v in enumerate(parents):
+                v = int(v)
+                if v >= index:
+                    self.change("parent", str(v + extra_numSprites), i)
+        
+        insertAt_lineNum = self.lineNums['spriteID'][index]
+        lines = self.lines
+        lines[insertAt_lineNum:insertAt_lineNum] = new_content
+        
+        content = "\n".join(lines)
+        new_object = Object(content)        
+        numSlots = int(new_object['numSlots'].split("#")[0])
+        
+        for i in range(numSlots + index, numSlots + index + extra_numSprites):
+            if int(new_object['parent'][i]) == -1: continue
+            if int(new_object['parent'][i]) >= extra_numSprites:
+                new_index = -1
+            else:
+                new_index = int(new_object['parent'][i]) + index
+            new_object.change("parent", str(new_index), i)
+        
+        self.update(new_object)
+        self.lineNums.update(new_object.lineNums)
+        self.lines[:] = new_object.lines
+        self.lineByTag.update(new_object.lineByTag)
+
+
+class T(list):
+
+    
+#    def __new__(cls, *args):
+#        if len(args) > 1: return super().__new__(cls, args)
+#        return super().__new__(cls, *args)
+    def __init__(self, *args):
+        if len(args) > 1:
+            super().__init__(args)
+        else:
+            super().__init__(*args)
 
 class Transition(tuple):
     def __new__(cls, *args):
         if len(args) > 1: return super().__new__(cls, args)
         return super().__new__(cls, *args)
     def __init__(self, *args):
+        if type(args[0]) is list: args = args[0]
         args = list(args)
         defaults = [None, None, None, None, "", None, "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
         for i in range(len(args), 14):
@@ -441,16 +500,10 @@ def craftingGuide(id):
         print("USE")
         print("\n")
         for t in b: print(t)
-    return a + b
 
 ################################################################################
 ############################################################# Loading ##########
 ################################################################################
-
-
-
-
-
 
 
 categories = {}
@@ -461,12 +514,17 @@ raw_transitions = {}
 depths = {}
 
 
-
+if "regenerate_all" in options:
+    options += ["regenerate_categories", 
+                "regenerate_objects", 
+                "regenerate_transitions", 
+                "regenerate_depths"]
+    
 
 
 ############################################################# Categories
 
-if regenerateCache_Categories:
+if "regenerate_categories" in options:
     
     path = Path("./categories")
     files = list_dir(path, file=1)
@@ -489,7 +547,7 @@ else:
 
 ############################################################# Objects
 
-if regenerateCache_Objects:
+if "regenerate_objects" in options:
     
     path = Path("./objects")
     files = list_dir(path, file=1)
@@ -516,7 +574,7 @@ else:
 
 ############################################################# Transitions
 
-if regenerateCache_Transitions:
+if "regenerate_transitions" in options:
     
     path = Path("./transitions/")
     files = list_dir(path, file=1)
@@ -558,7 +616,7 @@ else:
 
 natural_objects = {key:value for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000'}
 
-if regenerate_depthMap:
+if "regenerate_depths" in options:
 
     horizon = list(natural_objects.keys())
 
@@ -605,15 +663,8 @@ for oid, o in objects.items():
 print( "\nDONE LOADING\n" )
 
 
-r = ListOfObjects()
 
-for oid, o in objects.items():
-    sprites = o['spriteID']
-    if '100351' in sprites or '100352' in sprites:
-        r.append(oid)
-        
-for oid in r:
-    o = objects[oid]
-    print(oid, o['sounds'], o.name, )
+
+
 
 
