@@ -210,22 +210,11 @@ class Object(OrderedDict):
         self.lineByTag.update(new_object.lineByTag)
 
 
-class T(list):
-
-    
+class Transition():
 #    def __new__(cls, *args):
 #        if len(args) > 1: return super().__new__(cls, args)
 #        return super().__new__(cls, *args)
-    def __init__(self, *args):
-        if len(args) > 1:
-            super().__init__(args)
-        else:
-            super().__init__(*args)
-
-class Transition(tuple):
-    def __new__(cls, *args):
-        if len(args) > 1: return super().__new__(cls, args)
-        return super().__new__(cls, *args)
+    
     def __init__(self, *args):
         if type(args[0]) is list: args = args[0]
         args = list(args)
@@ -250,13 +239,29 @@ class Transition(tuple):
         return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
     def pprint(self):
         print( self.__repr() )
+    def copy(self):
+        return Transition(*self.toList())
+    def toList(self):
+        return [
+            self.a, self.b, self.c, self.d,
+            self.flag,
+            self.autoDecaySeconds,
+            self.actorMinUseFraction,
+            self.targetMinUseFraction,
+            self.reverseUseActorFlag,
+            self.reverseUseTargetFlag,
+            self.move,
+            self.desiredMoveDist,
+            self.noUseActorFlag,
+            self.noUseTargetFlag
+         ]
         
     def save(self):
         if self.a is None or self.b is None or self.c is None or self.d is None: return
         filename_flag = ""
         if self.flag != "": filename_flag = f"_{self.flag}"
         filename = f"{self.a}_{self.b}{filename_flag}.txt"
-        content_list = self[2:4] + self[5:]
+        content_list = self.toList()[2:4] + self.toList()[5:]
         content_list = [str(e) for e in content_list]
         content = " ".join(content_list)
         path = Path("./transitions/")
@@ -273,12 +278,21 @@ class Transition(tuple):
         flag = ""
         if len(filename_items) > 2: flag = filename_items[2]
         return cls(actor, target, newActor, newTarget, flag, *items[2:])
+    
+    def delete(self):
+        path = Path("./transitions/")
+        f = f"{self.a}_{self.b}.txt"
+        Path(path/f).unlink(missing_ok=True)
 
 class ListOfTransitions(list):
+    
+    def __add__(self, other):
+        return ListOfTransitions(list(self) + list(other))
+    
     def pprint(self):
         for t in self: t.pprint()
         
-    def filter(self, querystr):
+    def search(self, querystr):
         query_list = querystr.split()
         results = ListOfTransitions()
         for transition in self:
@@ -295,16 +309,16 @@ class ListOfTransitions(list):
                     break
             if mismatch: continue
             results.append(transition)
-        self[:] = results
+        return results
         
     def delete(self):
-        path = Path("./transitions/")
         for transition in self:
-            f = f"{transition.a}_{transition.b}.txt"
-            Path(path/f).unlink(missing_ok=True)
+            transition.delete()
             
     def raw(self):
-        self[:] = ListOfTransitions([t for t in self if (t.a, t.b, t.flag) in raw_transitions])
+        return ListOfTransitions([t for t in self if (t.a, t.b, t.flag) in raw_transitions and raw_transitions[(t.a, t.b, t.flag)].toList()[2:4] == [t.c, t.d]])
+        
+        
     
 class ListOfObjects(list):
     def __repr__(self):
@@ -315,8 +329,8 @@ class ListOfObjects(list):
             else:
                 r.append( f"{str(e):<8}" )
         return "\n".join(r)
-    def filter(self, querystr):
-        self[:] = search_objects_by_name(querystr, self)
+    def search(self, querystr):
+        self[:] = search(querystr, self)
 
 class Category(ListOfObjects):
     @classmethod
@@ -336,10 +350,10 @@ class Category(ListOfObjects):
 
 
 def make(id):
-    return ListOfTransitions(set(get_transition(None, None, id) + get_transition(None, None, None, id)))
+    return ListOfTransitions(set(get_transition(c=id) + get_transition(d=id)))
 
 def use(id):
-    return ListOfTransitions(set(get_transition(id) + get_transition(None, id)))
+    return ListOfTransitions(set(get_transition(a=id) + get_transition(b=id)))
 
 def is_category(id):
     return id in categories.keys() and not categories[id].type == 'pattern' and not categories[id].type == 'probSet'
@@ -355,8 +369,8 @@ def get_category_by_id(id):
 
 
 def parse_categories(trans):
-    other_parts = trans[5:]
-    trans = trans[:5]
+    other_parts = trans.toList()[5:]
+    trans = trans.toList()[:5]
     a, b, c, d, flag = trans
     category_bool = [is_category(e) for e in trans[:-1]]
     pattern_bool = [is_pattern(e) for e in trans[:-1]]
@@ -437,7 +451,7 @@ def parse_categories(trans):
 
 
 
-def search_objects_by_name(querystr, pool=None):
+def search(querystr, pool=None):
     query_list = querystr.split()
     results = ListOfObjects()
     if pool is None: pool = names.keys()
@@ -461,33 +475,33 @@ def get_transition(a=None, b=None, c=None, d=None):
     results = ListOfTransitions()
     
     if a is not None and b is not None:
-        results.append(transitions[a, b, ""])
+        key = (a, b, "")
+        if key in transitions.keys():
+            results.append(transitions[key])
         return results
     
     for tran in transitions.values():
-        actor, target, newActor, newTarget, flag = tran[:5]
+        actor, target, newActor, newTarget, flag = tran.toList()[:5]
         if (a is None or a == actor) and (b is None or b == target) and (c is None or c == newActor) and (d is None or d == newTarget):
             results.append( tran )
         
         probSet_transitions = []
         if is_probSet(newActor):
             for perhaps_newActor in get_category_by_id(newActor):
-                new_tran = list(tran)
-                new_tran[2] = perhaps_newActor
-                new_tran = Transition( *new_tran )
+                new_tran = tran.copy()
+                new_tran.b = perhaps_newActor
                 probSet_transitions.append( new_tran )
         elif is_probSet(newTarget):
             for perhaps_newTarget in get_category_by_id(newTarget):
-                new_tran = list(tran)
-                new_tran[3] = perhaps_newTarget
-                new_tran = Transition( *new_tran )
+                new_tran = tran.copy()
+                new_tran.d = perhaps_newTarget
                 probSet_transitions.append( new_tran )
         for probSet_transition in probSet_transitions:
             if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
                 results.append( probSet_transition )
     return results
 
-def craftingGuide(id):
+def guide(id):
     a = make(id)
     b = use(id)
     if len(a) > 0:
@@ -601,7 +615,7 @@ if "regenerate_transitions" in options:
         if len(trans) == 1: continue
 
         for tran in trans:
-            a, b, c, d, flag = tran[:5]
+            a, b, c, d, flag = tran.toList()[:5]
             if (a, b, flag) not in transitions.keys():
                 transitions[a, b, flag] = tran
                 
@@ -664,7 +678,69 @@ print( "\nDONE LOADING\n" )
 
 
 
+## non-cutter transitions that should use category
+#
+#problematicObjects = ListOfObjects()
+#
+#for o in objects.values():
+#    id = o.id
+#    a = get_transition(560, id).raw() #Knife
+#    b = get_transition(8709, id).raw() #Flint Knife
+#    c = get_transition(11671, id).raw() #Bronze Knife
+#    d = get_transition(964, id).raw() #Fine cutter
+#    if len(a) > 0 and len(b) > 0 and len(c) > 0 and len(d) == 0:
+#        if a[0].d == b[0].d:
+#            problematicObjects.append(id)
+#            print(o.id, o.name)
+#
+#for oid in problematicObjects:
+#    o = objects[oid]
+#    a = get_transition(560, oid).raw()[0]
+#    b = get_transition(8709, oid).raw()[0]
+#    c = get_transition(11671, oid).raw()[0]
+#    t = a.copy()
+#    a.delete()
+#    b.delete()
+#    c.delete()
+#    t.a = 964
+#    t.c = 964
+#    t.save()
 
 
 
+## hierarchy is fine
 
+
+#problematicObjects = ListOfObjects()
+
+for o in objects.values():
+    id = o.id
+    a = get_transition(560, id) #Knife
+    b = get_transition(11671, id) #Bronze Knife
+    c = get_transition(8709, id) #Flint Knife
+    d = get_transition(34, id) #Sharp Stone
+    
+    A = get_transition(964, id) #Fine cutter
+    B = get_transition(723, id) #Rough cutter
+    
+    
+    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
+    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
+    
+    ## unused categories.
+#    use(9046)
+#    use(9047)
+    
+    ## object can be cut by both fine and rough cutters categories?
+#    if len(A) > 0 and len(B) > 0:
+#        print(o.id, o.name)
+        
+    ## flint knife transitions outside category, which is fine
+#    if len(c.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
+#        print(o.id, o.name)
+        
+    ## sharp stone transitions outside category, which is fine
+#    if len(d.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
+#        print(o.id, o.name)
+        
+        
