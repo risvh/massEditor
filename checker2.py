@@ -330,7 +330,7 @@ class ListOfObjects(list):
                 r.append( f"{str(e):<8}" )
         return "\n".join(r)
     def search(self, querystr):
-        self[:] = search(querystr, self)
+        return search(querystr, self)
 
 class Category(ListOfObjects):
     @classmethod
@@ -677,22 +677,137 @@ for oid, o in objects.items():
 print( "\nDONE LOADING\n" )
 
 
+### 7. Unused categories.
+#use(9046)
+#use(9047)
 
-## non-cutter transitions that should use category
-#
+### 8. Should remove arrows before skinning animals 
+# use(561).search("arrow")
+
+### 9. These transitions should use Fine cutters, not skinning tool
+# use(561).search("-dead -shot -arrow -clubbed")
+
+### 10. harder snake kill? Pin down by long shaft?
+
+
+
+
+
+
+
 #problematicObjects = ListOfObjects()
-#
+
 #for o in objects.values():
 #    id = o.id
-#    a = get_transition(560, id).raw() #Knife
-#    b = get_transition(8709, id).raw() #Flint Knife
-#    c = get_transition(11671, id).raw() #Bronze Knife
-#    d = get_transition(964, id).raw() #Fine cutter
-#    if len(a) > 0 and len(b) > 0 and len(c) > 0 and len(d) == 0:
-#        if a[0].d == b[0].d:
-#            problematicObjects.append(id)
+#    a = get_transition(560, id) #Knife
+#    b = get_transition(11671, id) #Bronze Knife
+#    c = get_transition(8709, id) #Flint Knife
+#    d = get_transition(34, id) #Sharp Stone
+#    
+#    A = get_transition(964, id) #Fine cutter
+#    B = get_transition(723, id) #Rough cutter
+#    
+#    C = get_transition(561, id) #Skinning Tool
+#    
+#    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
+#    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
+    
+    
+#    ## 0. hierarchy is fine
+#    if len(a.raw()) == 0 and len(c.raw()) > 0:
+#        if len(a) == 0:
 #            print(o.id, o.name)
+#    if len(b.raw()) == 0 and len(c.raw()) > 0:
+#        if len(b) == 0:
+#            print(o.id, o.name)
+#    if len(a.raw()) == 0 and len(b.raw()) > 0:
+#        if len(a) == 0:
+#            print(o.id, o.name)
+    
+#    ## 1. Objects cut by fine cutters but not using the category
+#    if len(a.raw()) > 0 and len(b.raw()) > 0 and len(c.raw()) > 0 and len(A.raw()) == 0:
+#        if a.raw()[0].d == c.raw()[0].d:
+#            print(o.id, o.name)
+#            problematicObjects.append(id)
+    
+#    ## 2. Object can be cut by both fine and rough cutters categories?
+#    if len(A) > 0 and len(B) > 0:
+#        print(o.id, o.name)
+        
+#    ## 3. Flint knife transitions outside category, which is fine
+#    if len(c.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
+#        print(o.id, o.name)
+        
+#    ## 4. Sharp stone transitions outside category, which is fine
+#    if len(d.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
+#        print(o.id, o.name)
+
+
+#    ## 5. Knife hierarchy is fine
+#    if len(c) > 0 and ( len(a) == 0 and len(b) == 0 ):
+#        print(o.id, o.name) 
+#    if len(b) > 0 and len(a) == 0:
+#        print(o.id, o.name) 
+    
+#    ## 6. Objects dug by sharp stone but not knives, looks fine
+#    if len(d) > 0 and ( len(a) == 0 and len(b) == 0 and len(c) == 0 ):
+#        print(o.id, o.name)
+    
+
+
+
+
+### 11. Looking at the raw trans
+#cutter_targets = [t.b for t in use(964) + use(723)]
 #
+#knife_only_trans = ListOfTransitions([t for t in use(560).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
+#bknife_only_trans = ListOfTransitions([t for t in use(11671).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
+#fknife_only_trans = ListOfTransitions([t for t in use(8709).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
+#
+#knife_only_targets = [t.b for t in knife_only_trans]
+#bknife_only_targets = [t.b for t in bknife_only_trans]
+#
+#knife_only_trans_dedup = ListOfTransitions([t for t in knife_only_trans if t.b not in bknife_only_targets])
+#bknife_only_trans_dedup = ListOfTransitions([t for t in bknife_only_trans if t.b not in knife_only_targets])
+#
+#knife_only_trans_dedup2 = ListOfTransitions([t for t in knife_only_trans_dedup.search("-door") if t.b not in uncraftables])
+#
+## len(fknife_only_trans) = 0 # no flint knife only targets, good
+## len(bknife_only_trans_dedup) = 0 # whatever bronze knife cuts, knife cuts, good
+## bknife_only_trans.search("-butcher -used") # looks fine
+#
+### check knife_only_trans_dedup2
+## should add bronze knife with butter
+## should be able to cut Loom Reed with bronze knife
+## should be able to cut Plucked Chicken on Plate with bronze knife
+## should be able to cut Potato on Plate with bronze knife
+
+
+
+
+#### 12. Overall
+#
+#all_bknife_targets = [t.b for t in use(11671)]
+#fknife_only_trans = ListOfTransitions([t for t in use(8709) if t.b not in all_bknife_targets and t.b not in problematicObjects])
+#
+### Flint knife but not bronze knife - Water snare only, good
+#
+#all_knife_targets = [t.b for t in use(560)]
+#bknife_only_trans = ListOfTransitions([t for t in use(11671) if t.b not in all_knife_targets and t.b not in problematicObjects])
+#
+### Bronze knife but not knife - none, good
+#
+#all_fknife_targets = [t.b for t in use(8709)]
+#sharpy_only_trans = ListOfTransitions([t for t in use(34) if t.b not in all_fknife_targets and t.b not in problematicObjects])
+#sharpy_only_trans.search("-stake -branch -dug")
+#
+### Sharpy but not flint knife, looks good
+
+
+
+
+
+### fix for point 1
 #for oid in problematicObjects:
 #    o = objects[oid]
 #    a = get_transition(560, oid).raw()[0]
@@ -707,40 +822,74 @@ print( "\nDONE LOADING\n" )
 #    t.save()
 
 
+## fix for point 9
+#l = use(561).search("-dead -shot -arrow -clubbed")
+#for t1 in l:
+#    t2 = t1.copy()
+#    t2.a = 964
+#    t2.c = 964
+#    t1.delete()
+#    t2.save()
 
-## hierarchy is fine
 
 
-#problematicObjects = ListOfObjects()
 
-for o in objects.values():
-    id = o.id
-    a = get_transition(560, id) #Knife
-    b = get_transition(11671, id) #Bronze Knife
-    c = get_transition(8709, id) #Flint Knife
-    d = get_transition(34, id) #Sharp Stone
-    
-    A = get_transition(964, id) #Fine cutter
-    B = get_transition(723, id) #Rough cutter
-    
-    
-    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
-    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
-    
-    ## unused categories.
-#    use(9046)
-#    use(9047)
-    
-    ## object can be cut by both fine and rough cutters categories?
-#    if len(A) > 0 and len(B) > 0:
-#        print(o.id, o.name)
-        
-    ## flint knife transitions outside category, which is fine
-#    if len(c.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
-#        print(o.id, o.name)
-        
-    ## sharp stone transitions outside category, which is fine
-#    if len(d.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
-#        print(o.id, o.name)
-        
-        
+
+## Exotic flower stages should be using Dry and Wet plant categories
+watering_can = ListOfObjects([t.b for t in use(7013).raw().search("emptied -@ -bucket")])
+full_watering_can = ListOfObjects([t.b for t in use(7029).raw().search("-emptied -@ -bucket")])
+
+
+## Full watering can should be used on Banana and domestic mango tree
+full_can_trees = ListOfObjects([t.b for t in use(7029).raw().search("emptied -@ -bucket")])
+full_bucket_trees = ListOfObjects([t.b for t in use(660).search("tree")])
+not_in = ListOfObjects(set(full_bucket_trees) - set(full_can_trees))
+
+
+
+# water sources
+
+full_source_c = categories[394] # @ Full Portable Water Source 
+# 7013    Watering Can
+# 7029    Full Watering Can
+any_sprinkler_c = categories[12626] # @Any Sprinkler tapout
+
+
+## target
+
+dry_plant_c = categories[7031] # @Dry Plant
+## which contains "Dry Maple Sapling Cutting" and "Dry Maple Sapling" patterns
+trees_cutting = categories[1790]
+trees_sapling = categories[1802]
+# exotic flowers
+# staked bush
+
+
+
+
+
+
+
+
+
+full_source_targets = ListOfObjects([t.b for t in use(394).raw()])
+
+b = ListOfObjects( set(dry_plant_c) - set(full_source_targets) )
+# b == trees_cutting + trees_sapling, checks out
+
+
+## non-plant target for pouch and bowl
+others = ListOfObjects( set(full_source_targets) - set(dry_plant_c) )
+others2 = others.search("-@")
+others3 = ListOfObjects(set(others2) - set(full_watering_can))
+others4 = others3.search("-wall -rubble -pond -well -bucket -pouch")
+
+## raw transitions of Bowl of Water
+bowl_water_trans = get_transition(a=382, c=235).raw()
+bowl_water_targets = ListOfObjects([t.b for t in bowl_water_trans])
+
+## check why some are in others4 and others in bowl_water_targets
+
+
+bowl_water_trans = get_transition(a=382, c=235).raw()
+water_pouch_trans = get_transition(a=210, c=209).raw()
