@@ -1,11 +1,11 @@
 options = []
 
 
-#options.append("regenerate_all")
-#options.append("regenerate_categories")
-#options.append("regenerate_objects")
-#options.append("regenerate_transitions")
-#options.append("regenerate_depths")
+# options.append("regenerate_all")
+# options.append("regenerate_categories")
+# options.append("regenerate_objects")
+# options.append("regenerate_transitions")
+# options.append("regenerate_depths")
 
 
 
@@ -409,10 +409,10 @@ def parse_categories(trans):
     if pattern_numObj > 0:
         for i, items in enumerate(pattern_items):
             if len(items) == 0:
-                pattern_items[i] = [ (a, b, c, d)[i] ] * pattern_numObj
+                pattern_items[i] = [ [a, b, c, d][i] ] * pattern_numObj
 
         for a2, b2, c2, d2 in zip(*pattern_items):
-            results.append( (a2, b2, c2, d2, flag) )
+            results.append( [a2, b2, c2, d2, flag] )
 
 
     if zipCat_numObj > 0:
@@ -423,10 +423,10 @@ def parse_categories(trans):
             zip_category_items_copy = zip_category_items.copy()
             for i, items in enumerate(zip_category_items_copy):
                 if len(items) == 0:
-                    zip_category_items_copy[i] = [ (a2, b2, c2, d2)[i] ] * zipCat_numObj
+                    zip_category_items_copy[i] = [ [a2, b2, c2, d2][i] ] * zipCat_numObj
 
             for a3, b3, c3, d3 in zip(*zip_category_items_copy):
-                results.append( (a3, b3, c3, d3, flag) )
+                results.append( [a3, b3, c3, d3, flag] )
 
     if parse_other_category:
         results_copy = results.copy()
@@ -441,8 +441,8 @@ def parse_categories(trans):
                 for b3 in category_items_copy[1]:
                     for c3 in category_items_copy[2]:
                         for d3 in category_items_copy[3]:
-                            if (a3, b3, c3, d3, flag) not in results:
-                                results.append( (a3, b3, c3, d3, flag) )
+                            if [a3, b3, c3, d3, flag] not in results:
+                                results.append( [a3, b3, c3, d3, flag] )
     
     for i, result in enumerate(results):
         results[i] = Transition( *(result + other_parts) )
@@ -649,7 +649,7 @@ if "regenerate_depths" in options:
 
         trans = use(id)
         for tran in trans:
-            a, b, c, d, flag = tran[:5]
+            a, b, c, d, flag = tran.toList()[:5]
             if a in depths.keys() and b in depths.keys():
                 next_depth = max( depths[a], depths[b] ) + 1
                 if c > 0 and c not in depths.keys(): horizon.append(c)
@@ -675,161 +675,6 @@ for oid, o in objects.items():
         o.uncraftable = False
 
 print( "\nDONE LOADING\n" )
-
-
-### 7. Unused categories.
-#use(9046)
-#use(9047)
-
-### 8. Should remove arrows before skinning animals 
-# use(561).search("arrow")
-
-### 9. These transitions should use Fine cutters, not skinning tool
-# use(561).search("-dead -shot -arrow -clubbed")
-
-### 10. harder snake kill? Pin down by long shaft?
-
-
-
-
-
-
-
-#problematicObjects = ListOfObjects()
-
-#for o in objects.values():
-#    id = o.id
-#    a = get_transition(560, id) #Knife
-#    b = get_transition(11671, id) #Bronze Knife
-#    c = get_transition(8709, id) #Flint Knife
-#    d = get_transition(34, id) #Sharp Stone
-#    
-#    A = get_transition(964, id) #Fine cutter
-#    B = get_transition(723, id) #Rough cutter
-#    
-#    C = get_transition(561, id) #Skinning Tool
-#    
-#    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
-#    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
-    
-    
-#    ## 0. hierarchy is fine
-#    if len(a.raw()) == 0 and len(c.raw()) > 0:
-#        if len(a) == 0:
-#            print(o.id, o.name)
-#    if len(b.raw()) == 0 and len(c.raw()) > 0:
-#        if len(b) == 0:
-#            print(o.id, o.name)
-#    if len(a.raw()) == 0 and len(b.raw()) > 0:
-#        if len(a) == 0:
-#            print(o.id, o.name)
-    
-#    ## 1. Objects cut by fine cutters but not using the category
-#    if len(a.raw()) > 0 and len(b.raw()) > 0 and len(c.raw()) > 0 and len(A.raw()) == 0:
-#        if a.raw()[0].d == c.raw()[0].d:
-#            print(o.id, o.name)
-#            problematicObjects.append(id)
-    
-#    ## 2. Object can be cut by both fine and rough cutters categories?
-#    if len(A) > 0 and len(B) > 0:
-#        print(o.id, o.name)
-        
-#    ## 3. Flint knife transitions outside category, which is fine
-#    if len(c.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
-#        print(o.id, o.name)
-        
-#    ## 4. Sharp stone transitions outside category, which is fine
-#    if len(d.raw()) > 0 and ( len(B) > 0 or len(A) > 0 ):
-#        print(o.id, o.name)
-
-
-#    ## 5. Knife hierarchy is fine
-#    if len(c) > 0 and ( len(a) == 0 and len(b) == 0 ):
-#        print(o.id, o.name) 
-#    if len(b) > 0 and len(a) == 0:
-#        print(o.id, o.name) 
-    
-#    ## 6. Objects dug by sharp stone but not knives, looks fine
-#    if len(d) > 0 and ( len(a) == 0 and len(b) == 0 and len(c) == 0 ):
-#        print(o.id, o.name)
-    
-
-
-
-
-### 11. Looking at the raw trans
-#cutter_targets = [t.b for t in use(964) + use(723)]
-#
-#knife_only_trans = ListOfTransitions([t for t in use(560).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
-#bknife_only_trans = ListOfTransitions([t for t in use(11671).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
-#fknife_only_trans = ListOfTransitions([t for t in use(8709).raw() if t.b not in cutter_targets and t.b not in problematicObjects])
-#
-#knife_only_targets = [t.b for t in knife_only_trans]
-#bknife_only_targets = [t.b for t in bknife_only_trans]
-#
-#knife_only_trans_dedup = ListOfTransitions([t for t in knife_only_trans if t.b not in bknife_only_targets])
-#bknife_only_trans_dedup = ListOfTransitions([t for t in bknife_only_trans if t.b not in knife_only_targets])
-#
-#knife_only_trans_dedup2 = ListOfTransitions([t for t in knife_only_trans_dedup.search("-door") if t.b not in uncraftables])
-#
-## len(fknife_only_trans) = 0 # no flint knife only targets, good
-## len(bknife_only_trans_dedup) = 0 # whatever bronze knife cuts, knife cuts, good
-## bknife_only_trans.search("-butcher -used") # looks fine
-#
-### check knife_only_trans_dedup2
-## should add bronze knife with butter
-## should be able to cut Loom Reed with bronze knife
-## should be able to cut Plucked Chicken on Plate with bronze knife
-## should be able to cut Potato on Plate with bronze knife
-
-
-
-
-#### 12. Overall
-#
-#all_bknife_targets = [t.b for t in use(11671)]
-#fknife_only_trans = ListOfTransitions([t for t in use(8709) if t.b not in all_bknife_targets and t.b not in problematicObjects])
-#
-### Flint knife but not bronze knife - Water snare only, good
-#
-#all_knife_targets = [t.b for t in use(560)]
-#bknife_only_trans = ListOfTransitions([t for t in use(11671) if t.b not in all_knife_targets and t.b not in problematicObjects])
-#
-### Bronze knife but not knife - none, good
-#
-#all_fknife_targets = [t.b for t in use(8709)]
-#sharpy_only_trans = ListOfTransitions([t for t in use(34) if t.b not in all_fknife_targets and t.b not in problematicObjects])
-#sharpy_only_trans.search("-stake -branch -dug")
-#
-### Sharpy but not flint knife, looks good
-
-
-
-
-
-### fix for point 1
-#for oid in problematicObjects:
-#    o = objects[oid]
-#    a = get_transition(560, oid).raw()[0]
-#    b = get_transition(8709, oid).raw()[0]
-#    c = get_transition(11671, oid).raw()[0]
-#    t = a.copy()
-#    a.delete()
-#    b.delete()
-#    c.delete()
-#    t.a = 964
-#    t.c = 964
-#    t.save()
-
-
-## fix for point 9
-#l = use(561).search("-dead -shot -arrow -clubbed")
-#for t1 in l:
-#    t2 = t1.copy()
-#    t2.a = 964
-#    t2.c = 964
-#    t1.delete()
-#    t2.save()
 
 
 
