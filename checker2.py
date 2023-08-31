@@ -255,7 +255,13 @@ class Transition():
             self.noUseActorFlag,
             self.noUseTargetFlag
          ]
-        
+    
+    
+    def replace(self, old, new):
+        if self.a == old: self.a = new
+        if self.b == old: self.b = new
+        if self.c == old: self.c = new
+        if self.d == old: self.d = new
     def save(self):
         if self.a is None or self.b is None or self.c is None or self.d is None: return
         filename_flag = ""
@@ -676,19 +682,66 @@ for oid, o in objects.items():
 
 print( "\nDONE LOADING\n" )
 
+## 1. Should remove arrows before skinning animals 
+#l = use(561).search("arrow -no")
 
 
 
 
-## Exotic flower stages should be using Dry and Wet plant categories
+#for o in objects.values():
+#    id = o.id
+#    a = get_transition(560, id) #Knife
+#    b = get_transition(11671, id) #Bronze Knife
+#    c = get_transition(8709, id) #Flint Knife
+#    d = get_transition(34, id) #Sharp Stone
+#    
+#    A = get_transition(964, id) #Fine cutter
+#    B = get_transition(723, id) #Rough cutter
+#    
+#    C = get_transition(561, id) #Skinning Tool
+#    
+#    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
+#    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
+#    
+
+
+#    ## 2. have trans for all 3 knives, but not using any categories
+#    if len(a) > 0 and len(b) > 0 and len(c) > 0 and (len(A) == 0 and len(C) == 0 and len(B) == 0):
+#        print(o.id, o.name)
+
+
+# 1332 Dead Boar# no arrow
+# 1352 Dead Domestic Pig
+# 2962 Primitive Fence Gate
+# 2982 Shaky Primitive Fence#horizontal
+# 2983 Shaky Primitive Fence Gate#+blocksMoving
+# 2984 Shaky Primitive Fence Gate
+# 2985 Shaky Primitive Fence#corner
+# 2986 Shaky Primitive Fence#vert
+# 562 Skinned Mouflon
+# 596 Skinned Sheep
+# 6926 Skinned Cow
+# 6927 Skinned Bison
+
+
+
+
+
+
+
+## 3. Exotic flower stages should be using Dry and Wet plant categories
 watering_can = ListOfObjects([t.b for t in use(7013).raw().search("emptied -@ -bucket")])
 full_watering_can = ListOfObjects([t.b for t in use(7029).raw().search("-emptied -@ -bucket")])
+# set(full_watering_can) == set(watering_can)
 
-
-## Full watering can should be used on Banana and domestic mango tree
+## 4. Full watering can should be used on Banana and domestic mango tree
 full_can_trees = ListOfObjects([t.b for t in use(7029).raw().search("emptied -@ -bucket")])
 full_bucket_trees = ListOfObjects([t.b for t in use(660).search("tree")])
 not_in = ListOfObjects(set(full_bucket_trees) - set(full_can_trees))
+
+
+
+
 
 
 
@@ -714,8 +767,15 @@ trees_sapling = categories[1802]
 
 
 
+## 5. These trees are not using the categories
+sapling_not_in_cat = ListOfObjects(set(search("dry sapling -cutting")) - set(trees_sapling))
 
 
+
+
+
+
+## 6. check why some are in others4 and others in bowl_water_targets
 
 full_source_targets = ListOfObjects([t.b for t in use(394).raw()])
 
@@ -732,9 +792,6 @@ others4 = others3.search("-wall -rubble -pond -well -bucket -pouch")
 ## raw transitions of Bowl of Water
 bowl_water_trans = get_transition(a=382, c=235).raw()
 bowl_water_targets = ListOfObjects([t.b for t in bowl_water_trans])
-
-## check why some are in others4 and others in bowl_water_targets
-
 
 bowl_water_trans = get_transition(a=382, c=235).raw()
 water_pouch_trans = get_transition(a=210, c=209).raw()
