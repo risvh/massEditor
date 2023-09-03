@@ -288,6 +288,8 @@ class Transition():
     def delete(self):
         path = Path("./transitions/")
         f = f"{self.a}_{self.b}.txt"
+        if self.flag != "": f = f"{self.a}_{self.b}_{self.flag}.txt"
+        if not Path(path/f).exists(): print(f"TRANSITION DELETE NOT EXIST: {f}")
         Path(path/f).unlink(missing_ok=True)
 
 class ListOfTransitions(list):
@@ -335,6 +337,8 @@ class ListOfObjects(list):
             else:
                 r.append( f"{str(e):<8}" )
         return "\n".join(r)
+    def __sub__(self, other):
+        return ListOfObjects(set(self) - set(other))
     def search(self, querystr):
         return search(querystr, self)
 
@@ -483,8 +487,10 @@ def get_transition(a=None, b=None, c=None, d=None):
     if a is not None and b is not None:
         key = (a, b, "")
         if key in transitions.keys():
-            results.append(transitions[key])
-        return results
+            tran = transitions[key]
+            if c is not None and tran.c == c and d is not None and tran.d == d:
+                results.append(transitions[key])
+                return results
     
     for tran in transitions.values():
         actor, target, newActor, newTarget, flag = tran.toList()[:5]
@@ -520,6 +526,13 @@ def guide(id):
         print("USE")
         print("\n")
         for t in b: print(t)
+        
+def getCategoriesOf(id):
+    r = ListOfObjects()
+    for cid, c in categories.items():
+        if id in c:
+            r.append(cid)
+    return r
 
 ################################################################################
 ############################################################# Loading ##########
@@ -682,116 +695,21 @@ for oid, o in objects.items():
 
 print( "\nDONE LOADING\n" )
 
-## 1. Should remove arrows before skinning animals 
-#l = use(561).search("arrow -no")
+
+
+
+## TODO:
+# getChildrenOf(id)
+# combine save and change, also auto clear cache
 
 
 
 
-#for o in objects.values():
-#    id = o.id
-#    a = get_transition(560, id) #Knife
-#    b = get_transition(11671, id) #Bronze Knife
-#    c = get_transition(8709, id) #Flint Knife
-#    d = get_transition(34, id) #Sharp Stone
-#    
-#    A = get_transition(964, id) #Fine cutter
-#    B = get_transition(723, id) #Rough cutter
-#    
-#    C = get_transition(561, id) #Skinning Tool
-#    
-#    y = get_transition(9046, id) #@ Tier 1 Knives   Cheese and water snares  
-#    z = get_transition(9047, id) #@ Tier 2 Knives   Not used
-#    
+l = search('fishing pole')
 
-
-#    ## 2. have trans for all 3 knives, but not using any categories
-#    if len(a) > 0 and len(b) > 0 and len(c) > 0 and (len(A) == 0 and len(C) == 0 and len(B) == 0):
-#        print(o.id, o.name)
-
-
-# 1332 Dead Boar# no arrow
-# 1352 Dead Domestic Pig
-# 2962 Primitive Fence Gate
-# 2982 Shaky Primitive Fence#horizontal
-# 2983 Shaky Primitive Fence Gate#+blocksMoving
-# 2984 Shaky Primitive Fence Gate
-# 2985 Shaky Primitive Fence#corner
-# 2986 Shaky Primitive Fence#vert
-# 562 Skinned Mouflon
-# 596 Skinned Sheep
-# 6926 Skinned Cow
-# 6927 Skinned Bison
+for id in l:
+    o = objects[id]
+    print(id, o.name, o['minPickupAge'])
 
 
 
-
-
-
-
-## 3. Exotic flower stages should be using Dry and Wet plant categories
-watering_can = ListOfObjects([t.b for t in use(7013).raw().search("emptied -@ -bucket")])
-full_watering_can = ListOfObjects([t.b for t in use(7029).raw().search("-emptied -@ -bucket")])
-# set(full_watering_can) == set(watering_can)
-
-## 4. Full watering can should be used on Banana and domestic mango tree
-full_can_trees = ListOfObjects([t.b for t in use(7029).raw().search("emptied -@ -bucket")])
-full_bucket_trees = ListOfObjects([t.b for t in use(660).search("tree")])
-not_in = ListOfObjects(set(full_bucket_trees) - set(full_can_trees))
-
-
-
-
-
-
-
-# water sources
-
-full_source_c = categories[394] # @ Full Portable Water Source 
-# 7013    Watering Can
-# 7029    Full Watering Can
-any_sprinkler_c = categories[12626] # @Any Sprinkler tapout
-
-
-## target
-
-dry_plant_c = categories[7031] # @Dry Plant
-## which contains "Dry Maple Sapling Cutting" and "Dry Maple Sapling" patterns
-trees_cutting = categories[1790]
-trees_sapling = categories[1802]
-# exotic flowers
-# staked bush
-
-
-
-
-
-
-## 5. These trees are not using the categories
-sapling_not_in_cat = ListOfObjects(set(search("dry sapling -cutting")) - set(trees_sapling))
-
-
-
-
-
-
-## 6. check why some are in others4 and others in bowl_water_targets
-
-full_source_targets = ListOfObjects([t.b for t in use(394).raw()])
-
-b = ListOfObjects( set(dry_plant_c) - set(full_source_targets) )
-# b == trees_cutting + trees_sapling, checks out
-
-
-## non-plant target for pouch and bowl
-others = ListOfObjects( set(full_source_targets) - set(dry_plant_c) )
-others2 = others.search("-@")
-others3 = ListOfObjects(set(others2) - set(full_watering_can))
-others4 = others3.search("-wall -rubble -pond -well -bucket -pouch")
-
-## raw transitions of Bowl of Water
-bowl_water_trans = get_transition(a=382, c=235).raw()
-bowl_water_targets = ListOfObjects([t.b for t in bowl_water_trans])
-
-bowl_water_trans = get_transition(a=382, c=235).raw()
-water_pouch_trans = get_transition(a=210, c=209).raw()
