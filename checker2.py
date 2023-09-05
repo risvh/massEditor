@@ -1,11 +1,11 @@
 options = []
 
 
-# options.append("regenerate_all")
+#options.append("regenerate_all")
 # options.append("regenerate_categories")
 # options.append("regenerate_objects")
 # options.append("regenerate_transitions")
-# options.append("regenerate_depths")
+#options.append("regenerate_depths")
 
 
 
@@ -57,25 +57,6 @@ def load_pickle_file(filepath):
 ################################################################################
 ############################################################# Main #############
 ################################################################################
-
-def read_category_as_list(id):
-    path = Path("./categories")
-    filename = f"{id}.txt"
-    content = read_txt(path / filename)
-    list_str = content[content.find("\n", content.find("numObjects="))+1:]
-    return list_str.splitlines()
-
-def read_object_by_id(id):
-    path = Path("./objects")
-    content = read_txt(path / f"{id}.txt")
-    return Object(content)
-
-def read_object_name_by_id(id):
-    id = int(id)
-    if id <= 0: return str(id)
-    return read_object_by_id(id)['name']
-
-
 
 
 from collections import OrderedDict
@@ -150,16 +131,13 @@ class Object(OrderedDict):
         lhs = f"{tag}="
         if tag == 'name': lhs = ""
         self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
-        return "\n".join(self.lines)
+        return Object("\n".join(self.lines))
     def save(self):
         content = "\n".join(self.lines)
         id = self['id']
         path = Path("./objects")
         save_txt(content, path / f"{id}.txt")
-    
-        # first to last
-        # back to front
-        # 0 to N
+        objects[id] = Object("\n".join(self.lines))
     
     def getSpriteLines(self, index_start, index_end = None):
         if index_end is None: index_end = index_start + 1
@@ -171,6 +149,9 @@ class Object(OrderedDict):
         return self.lines[a:b]
     
     def insertSprites(self, index, new_content):
+        # first to last
+        # back to front
+        # 0 to N
         if type(new_content) is str: new_content = new_content.split("\n")
         old_numSprites = self['numSprites']
         partiral_object = Object( "\n".join(new_content) )
@@ -238,7 +219,7 @@ class Transition():
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
         return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
     def pprint(self):
-        print( self.__repr() )
+        print( self.__repr__() )
     def copy(self):
         return Transition(*self.toList())
     def toList(self):
@@ -272,6 +253,7 @@ class Transition():
         content = " ".join(content_list)
         path = Path("./transitions/")
         save_txt(content, path/filename)
+        transitions[(self.a, self.b, self.flag)] = Transition(*self.toList())
     
     @classmethod
     def load(cls, filename, content):
@@ -703,13 +685,32 @@ print( "\nDONE LOADING\n" )
 # combine save and change, also auto clear cache
 
 
+o1 = objects[14342]
 
+eyeIndex = o1['spriteID'].index('101631')
+eyePos = Pos(o1['pos'][eyeIndex])
 
-l = search('fishing pole')
+blingIndex = o1['spriteID'].index('2278')
+blingPos = Pos(o1['pos'][blingIndex])
 
-for id in l:
-    o = objects[id]
-    print(id, o.name, o['minPickupAge'])
+relativePos = blingPos - eyePos
 
+t = o1.getSpriteLines(0, 6)
+o2 = objects[14344]
+o2.insertSprites(4, t)
 
+newEyeIndex = o2['spriteID'].index('101631')
+newEyePos = Pos(o2['pos'][newEyeIndex])
 
+oldBlingIndex = o2['spriteID'].index('2278')
+oldBlingPos = Pos(o2['pos'][oldBlingIndex])
+
+newBlinkPos = relativePos + newEyePos
+delta = newBlinkPos - oldBlingPos
+
+for i, id in enumerate(o2['spriteID']):
+    if int(id) == 2278:
+        newPos = Pos(o2['pos'][i]) + delta
+        o2.change('pos', str(newPos), i)
+
+o2.save()
