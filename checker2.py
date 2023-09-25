@@ -1,11 +1,11 @@
 options = []
 
 
-#options.append("regenerate_all")
+# options.append("regenerate_all")
 # options.append("regenerate_categories")
 # options.append("regenerate_objects")
 # options.append("regenerate_transitions")
-#options.append("regenerate_depths")
+# options.append("regenerate_depths")
 
 
 
@@ -36,11 +36,6 @@ def save_txt(text, path):
     with open(path, 'w', newline='\n') as f:
         f.write(text)
     return text
-
-def save_json_file(filepath, j):
-    with open(filepath, 'w') as f:
-        import json
-        json.dump(j, f)
 
 def save_pickle_file(filepath, j):
     with open(filepath, 'wb') as f:
@@ -116,6 +111,8 @@ class Object(OrderedDict):
         self.lineNums = lineNums
         self.lines = lines
         self.lineByTag = lineByTag
+    def copy(self):
+        return Object("\n".join(self.lines))
     def change(self, tag, value, index=None):
         lineNum = self.lineNums[tag]
         if type(self[tag]) is list and index is not None:
@@ -133,10 +130,14 @@ class Object(OrderedDict):
         self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
         return Object("\n".join(self.lines))
     def save(self):
+        
         content = "\n".join(self.lines)
-        id = self['id']
+        
         path = Path("./objects")
+        id = self['id']
         save_txt(content, path / f"{id}.txt")
+        Path(path/"cache.fcz").unlink(missing_ok=True)
+        
         objects[id] = Object("\n".join(self.lines))
     
     def getSpriteLines(self, index_start, index_end = None):
@@ -147,7 +148,6 @@ class Object(OrderedDict):
         else:
             b = self.lineNums['spriteID'][index_end]
         return self.lines[a:b]
-    
     def insertSprites(self, index, new_content):
         # first to last
         # back to front
@@ -169,7 +169,10 @@ class Object(OrderedDict):
                 if v >= index:
                     self.change("parent", str(v + extra_numSprites), i)
         
-        insertAt_lineNum = self.lineNums['spriteID'][index]
+        if index >= int(old_numSprites):
+            insertAt_lineNum = self.lineNums['headIndex']
+        else:
+            insertAt_lineNum = self.lineNums['spriteID'][index]
         lines = self.lines
         lines[insertAt_lineNum:insertAt_lineNum] = new_content
         
@@ -192,14 +195,11 @@ class Object(OrderedDict):
 
 
 class Transition():
-#    def __new__(cls, *args):
-#        if len(args) > 1: return super().__new__(cls, args)
-#        return super().__new__(cls, *args)
     
     def __init__(self, *args):
         if type(args[0]) is list: args = args[0]
         args = list(args)
-        defaults = [None, None, None, None, "", None, "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
+        defaults = [None, None, None, None, "", "0", "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
         for i in range(len(args), 14):
             args.append( defaults[i] )
         [
@@ -245,14 +245,18 @@ class Transition():
         if self.d == old: self.d = new
     def save(self):
         if self.a is None or self.b is None or self.c is None or self.d is None: return
-        filename_flag = ""
-        if self.flag != "": filename_flag = f"_{self.flag}"
-        filename = f"{self.a}_{self.b}{filename_flag}.txt"
+        
         content_list = self.toList()[2:4] + self.toList()[5:]
         content_list = [str(e) for e in content_list]
         content = " ".join(content_list)
+        
         path = Path("./transitions/")
+        filename_flag = ""
+        if self.flag != "": filename_flag = f"_{self.flag}"
+        filename = f"{self.a}_{self.b}{filename_flag}.txt"
         save_txt(content, path/filename)
+        Path(path/"cache.fcz").unlink(missing_ok=True)
+        
         transitions[(self.a, self.b, self.flag)] = Transition(*self.toList())
     
     @classmethod
@@ -288,15 +292,23 @@ class ListOfTransitions(list):
         for transition in self:
             transition_str = str(transition)
             mismatch = False
-            for query in query_list:
+            for query in query_list:                
+                reverse = False
+                exact = False
                 if query[0] == '-' and query != '-1':
                     query = query[1:]
-                    if query.lower() in transition_str.lower(): 
+                    reverse = True
+                if query[-1] == '.':
+                    query = query[:-1]
+                    exact = True
+                if not exact:
+                    if (not reverse and query.lower() not in transition_str.lower()) or (reverse and query.lower() in transition_str.lower()):
                         mismatch = True
                         break
-                elif query.lower() not in transition_str.lower(): 
-                    mismatch = True
-                    break
+                else:
+                    if (not reverse and query.lower() not in transition_str.lower().split()) or (reverse and query.lower() in transition_str.lower().split()):
+                        mismatch = True
+                        break
             if mismatch: continue
             results.append(transition)
         return results
@@ -341,12 +353,6 @@ class Category(ListOfObjects):
         
 
 
-def make(id):
-    return ListOfTransitions(set(get_transition(c=id) + get_transition(d=id)))
-
-def use(id):
-    return ListOfTransitions(set(get_transition(a=id) + get_transition(b=id)))
-
 def is_category(id):
     return id in categories.keys() and not categories[id].type == 'pattern' and not categories[id].type == 'probSet'
 
@@ -355,10 +361,6 @@ def is_pattern(id):
 
 def is_probSet(id):
     return id in categories.keys() and categories[id].type == 'probSet'
-
-def get_category_by_id(id):
-    return categories[id]
-
 
 def parse_categories(trans):
     other_parts = trans.toList()[5:]
@@ -376,16 +378,16 @@ def parse_categories(trans):
 
     pattern_numObj = 0
     if is_pattern(a):
-        pattern_numObj = len(get_category_by_id(a))
+        pattern_numObj = len(categories[a])
     elif is_pattern(b):
-        pattern_numObj = len(get_category_by_id(b))
+        pattern_numObj = len(categories[b])
 
     zipCat_numObj = 0
     parse_other_category = False
 
     for i, e in enumerate((a, b, c, d)):
         if not is_category(e) and not is_pattern(e): continue
-        e_category_list = get_category_by_id(e).copy()
+        e_category_list = categories[e].copy()
         if is_pattern(e) and len(e_category_list) == pattern_numObj:
             pattern_items[i] += e_category_list
         elif is_pattern(e) and len(e_category_list) != pattern_numObj:
@@ -450,15 +452,23 @@ def search(querystr, pool=None):
     for id in pool:
         name = names[id]
         mismatch = False
-        for query in query_list:
-            if query[0] == '-':
+        for query in query_list:                
+            reverse = False
+            exact = False
+            if query[0] == '-' and query != '-1':
                 query = query[1:]
-                if query.lower() in name.lower(): 
+                reverse = True
+            if query[-1] == '.':
+                query = query[:-1]
+                exact = True
+            if not exact:
+                if (not reverse and query.lower() not in name.lower()) or (reverse and query.lower() in name.lower()):
                     mismatch = True
                     break
-            elif query.lower() not in name.lower(): 
-                mismatch = True
-                break
+            else:
+                if (not reverse and query.lower() not in name.lower().split()) or (reverse and query.lower() in name.lower().split()):
+                    mismatch = True
+                    break
         if mismatch: continue
         results.append(id)
     return results
@@ -475,23 +485,44 @@ def get_transition(a=None, b=None, c=None, d=None):
                 return results
     
     for tran in transitions.values():
-        actor, target, newActor, newTarget, flag = tran.toList()[:5]
-        if (a is None or a == actor) and (b is None or b == target) and (c is None or c == newActor) and (d is None or d == newTarget):
+        if (a is None or a == tran.a) and (b is None or b == tran.b) and (c is None or c == tran.c) and (d is None or d == tran.d):
             results.append( tran )
-        
-        probSet_transitions = []
-        if is_probSet(newActor):
-            for perhaps_newActor in get_category_by_id(newActor):
-                new_tran = tran.copy()
-                new_tran.b = perhaps_newActor
-                probSet_transitions.append( new_tran )
-        elif is_probSet(newTarget):
-            for perhaps_newTarget in get_category_by_id(newTarget):
-                new_tran = tran.copy()
-                new_tran.d = perhaps_newTarget
-                probSet_transitions.append( new_tran )
+    
+    for tran in results.copy():
+        probSet_transitions = parse_probSet(tran)
         for probSet_transition in probSet_transitions:
             if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
+                results.append( probSet_transition )
+    return results
+
+def parse_probSet(tran):
+    probSet_transitions = ListOfTransitions()
+    if is_probSet(tran.c):
+        for perhaps_newActor in categories[tran.c]:
+            new_tran = tran.copy()
+            new_tran.b = perhaps_newActor
+            probSet_transitions.append( new_tran )
+    elif is_probSet(tran.d):
+        for perhaps_newTarget in categories[tran.d]:
+            new_tran = tran.copy()
+            new_tran.d = perhaps_newTarget
+            probSet_transitions.append( new_tran )
+    return probSet_transitions
+
+def make(id):
+    return ListOfTransitions(set(get_transition(c=id) + get_transition(d=id)))
+
+def use(id):
+    results = ListOfTransitions()
+    
+    for tran in transitions.values():
+        if id == tran.a or id == tran.b:
+            results.append( tran )
+            
+    for tran in results.copy():
+        probSet_transitions = parse_probSet(tran)
+        for probSet_transition in probSet_transitions:
+            if id == probSet_transition.a or id == probSet_transition.b:
                 results.append( probSet_transition )
     return results
 
@@ -514,6 +545,21 @@ def getCategoriesOf(id):
     for cid, c in categories.items():
         if id in c:
             r.append(cid)
+    return r
+
+def child(id):
+    r = ListOfObjects()
+    for t in use(id):
+        if t.c > 0 and t.a != t.c: r.append(t.c)
+        if t.d > 0 and t.b != t.d: r.append(t.d)
+    return r
+
+
+def parent(id):
+    r = ListOfObjects()
+    for t in make(id):
+        if t.a > 0 and t.a != t.c: r.append(t.a)
+        if t.b > 0 and t.b != t.d: r.append(t.b)
     return r
 
 ################################################################################
@@ -629,13 +675,13 @@ else:
 
 ############################################################# Generating Object Depth Map
 
-natural_objects = {key:value for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000'}
+natural_objects = [key for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000']
 
 if "regenerate_depths" in options:
 
-    horizon = list(natural_objects.keys())
+    horizon = list(natural_objects)
 
-    for id in natural_objects.keys():
+    for id in natural_objects:
         depths[id] = 0
     depths[0] = 0
     depths[-1] = 0
@@ -649,14 +695,15 @@ if "regenerate_depths" in options:
         i += 1
 
         trans = use(id)
+#        trans = [t for t in transitions.values() if t.a == id or t.b == id]
+        
         for tran in trans:
-            a, b, c, d, flag = tran.toList()[:5]
-            if a in depths.keys() and b in depths.keys():
-                next_depth = max( depths[a], depths[b] ) + 1
-                if c > 0 and c not in depths.keys(): horizon.append(c)
-                if d > 0 and d not in depths.keys(): horizon.append(d)
-                depths[c] = next_depth if c not in depths.keys() else min(depths[c], next_depth)
-                depths[d] = next_depth if d not in depths.keys() else min(depths[d], next_depth)
+            if tran.a in depths.keys() and tran.b in depths.keys():
+                next_depth = max( depths[tran.a], depths[tran.b] ) + 1
+                if tran.c > 0 and tran.c not in depths.keys(): horizon.append(tran.c)
+                if tran.d > 0 and tran.d not in depths.keys(): horizon.append(tran.d)
+                depths[tran.c] = next_depth if tran.c not in depths.keys() else min(depths[tran.c], next_depth)
+                depths[tran.d] = next_depth if tran.d not in depths.keys() else min(depths[tran.d], next_depth)
                     
     
     save_pickle_file('depths.pickle', depths)
@@ -665,7 +712,7 @@ else:
     depths = load_pickle_file('depths.pickle')
     
 
-uncraftables = list(objects.keys() - depths.keys())
+uncraftables = ListOfObjects(objects.keys() - depths.keys())
 
 for oid, o in objects.items():
     o.name = o['name']
@@ -679,38 +726,209 @@ print( "\nDONE LOADING\n" )
 
 
 
-
-## TODO:
-# getChildrenOf(id)
-# combine save and change, also auto clear cache
+1/0
 
 
-o1 = objects[14342]
 
-eyeIndex = o1['spriteID'].index('101631')
-eyePos = Pos(o1['pos'][eyeIndex])
+l = [int(e) for e in """7301
+7299
+7303
+14360
+7298
+7304
+14362
+14361
+7297
+7305
+14365
+14364
+14363
+7296""".splitlines()]
 
-blingIndex = o1['spriteID'].index('2278')
-blingPos = Pos(o1['pos'][blingIndex])
+l2 = {}
 
-relativePos = blingPos - eyePos
+for e in l:
+    i1 = int( names[e][ names[e].find("#") + 1 ] )
+    i2 = int( names[e][ names[e].find("#honey") + 6 ] )
+    
+    l2[i1, i2] = e
 
-t = o1.getSpriteLines(0, 6)
-o2 = objects[14344]
-o2.insertSprites(4, t)
 
-newEyeIndex = o2['spriteID'].index('101631')
-newEyePos = Pos(o2['pos'][newEyeIndex])
+l3 = ListOfObjects(range(14366, 14380))
 
-oldBlingIndex = o2['spriteID'].index('2278')
-oldBlingPos = Pos(o2['pos'][oldBlingIndex])
+l4 = ListOfObjects([int(e) for e in """7306
+14381
+7329
+14383
+7327
+7325
+14386
+14387
+7323
+7321
+14390
+14391
+14392
+7310""".splitlines()])
 
-newBlinkPos = relativePos + newEyePos
-delta = newBlinkPos - oldBlingPos
+l5 = ListOfObjects(range(14393, 14407))
 
-for i, id in enumerate(o2['spriteID']):
-    if int(id) == 2278:
-        newPos = Pos(o2['pos'][i]) + delta
-        o2.change('pos', str(newPos), i)
 
-o2.save()
+
+# for e in search("bee hive outdated leaving"):
+#     o = objects[e]
+    
+#     i1 = int( names[e][ names[e].find("#") + 1 ] )
+    
+#     if 'empty' in o.name:
+#         new_name = o.name.replace('empty bee leaving', '#honey0 #bee')
+#     else:
+#         new_name = o.name.replace('bee leaving', '#honey' + str(i1) + ' #bee')
+    
+#     new_name = new_name.replace("(outdated) ", "")
+    
+#     print(e, new_name)
+    
+#     o.change('name', new_name)
+
+#     o.save()
+
+
+# 1/0
+
+
+
+
+
+# o = objects[7310]
+# sprites = o.getSpriteLines(13, 19)
+
+# id = 14379
+
+# for e in l:
+#     id += 1
+    
+#     i1 = int( names[e][ names[e].find("#") + 1 ] )
+#     i2 = int( names[e][ names[e].find("#honey") + 6 ] )
+    
+#     if i1 != 1 and i1 == i2: continue
+#     if i2 == 0: continue
+    
+#     o = objects[e]
+    
+#     o.change('id', id)
+#     o.change('name', o.name + " #bee")
+    
+#     numSprites = int(o['numSprites'])
+#     o.insertSprites(numSprites, sprites)
+    
+#     print(id, o.name + " #bee")
+
+#     o.save()
+
+
+
+# id = 14392
+
+# for e in l:
+#     id += 1
+    
+#     o = objects[e]
+#     o.change('id', id)
+#     o.change('name', o.name + " #justPlaced")
+    
+#     o.change('sounds', '505:0.250000,-1:0.0,-1:0.0,-1:0.0') # 496:0.250000,-1:0.0,-1:0.0,-1:0.0
+
+#     o.save()
+
+
+
+
+
+
+
+
+for i, e in enumerate(l):
+    i1 = int( names[e][ names[e].find("#") + 1 ] )
+    i2 = int( names[e][ names[e].find("#honey") + 6 ] )
+    
+    id = l2[i1, i2]
+    name = names[id]
+    
+    # na = 14358
+    # if "#honey0" in name: na = 7302
+    
+    # if i1-1 == 0:
+    #     nt = 7300    
+    # elif i2 > 0:
+    #     nt = l2[i1-1, i2-1]
+    # else:
+    #     nt = l2[i1-1, i2]
+        
+    # t = Transition(0, id, na, nt)
+    
+    
+    
+    # t2 = Transition(-1, l5[i], 0, l[i])
+    # t2.autoDecaySeconds = '1'
+    # t2.save()
+    
+    
+    # if i1 == 4:
+    #     continue
+    # else:
+    #     nt = l2[i1+1, i2]
+    
+    # t = Transition(7302, id, 0, nt)
+    # t.delete()
+    
+    # i2 = l.index(nt)
+    
+    # t1 = Transition(7302, id, 0, l5[i2])
+    # t1.save()
+    
+    
+    
+    # t = Transition(-1, id, 0, l4[i])
+    # t.autoDecaySeconds = '600'
+    
+    
+    # t = Transition(-1, l4[i], 0, 4567)
+    # t.move = '3'
+    # t.autoDecaySeconds = '1'
+    
+    # t = Transition(l4[i], -1, l3[i], 4567)
+    
+    
+    # t = Transition(-1, l3[i], 0, id)
+    # t.autoDecaySeconds = '1'
+    
+    
+    
+    # t = Transition(4567, l3[i], 0, id)
+
+    
+    # if i2 == i1:
+    #     nt = l2[i1, i2]
+    # else:
+    #     nt = l2[i1, i2+1]
+
+    # t = Transition(4569, id, 0, nt)
+    
+    
+    
+    # if i1 == 4: continue
+    # t = Transition(14358, id, 0, l2[i1+1, i2+1])
+    # t.delete()
+    
+    # i3 = l.index(l2[i1+1, i2+1])
+    # t2 = Transition(14358, id, 0, l5[i3])
+    
+    
+    # t2.save()
+    
+    
+    # print(t)
+
+
+
