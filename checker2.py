@@ -56,6 +56,49 @@ def load_pickle_file(filepath):
 
 from collections import OrderedDict
 
+def objectFileLinesParser(content):
+    odict = OrderedDict()
+    lines = content.splitlines()
+    lineNums = OrderedDict()
+#    lineByTag = OrderedDict()
+
+    for lineNum, line in enumerate(lines):
+        if line.count("=") == 0:
+            parsed_line = [['name', line]]
+        elif line.count("=") > 1 and line.count(",") > 0:
+            # parsed_line = [e.split("=", maxsplit=1) for e in line.split(",")]
+            parts = line.split(',')
+            new_parts = []
+            for part in parts:
+                if "=" in part:
+                    new_parts.append(part)
+                else:
+                    new_parts[-1] += (',' + part)
+            parsed_line = [part.split("=", maxsplit=1) for part in new_parts]
+        else:
+            parsed_line = [line.split("=", maxsplit=1)]
+
+        parsed = [(tag, value, lineNum, line) for tag, value in parsed_line]
+
+        for item in parsed:
+            tag, value, lineNum, rawLine = item
+            if tag in odict.keys():
+                if type(odict[tag]) is not list:
+                    odict[tag] = [odict[tag]]
+                    lineNums[tag] = [lineNums[tag]]
+#                    lineByTag[tag] = [lineByTag[tag]]
+                odict[tag].append(value)
+                lineNums[tag].append(lineNum)
+#                lineByTag[tag].append(rawLine)
+            else:
+                odict[tag] = value
+                lineNums[tag] = lineNum
+#                lineByTag[tag] = rawLine
+    
+    return odict, lineNums, lines#, lineByTag
+
+
+
 class Pos(list):
     def __add__(self, other):
         return Pos(self[0] + other[0], self[1] + other[1])
@@ -69,51 +112,27 @@ class Pos(list):
     def __repr__(self):
         return f"{self[0]:.6f},{self[1]:.6f}"
 
+
+
+
 class Object(OrderedDict):
     def __init__(self, content = ""):
-        lines = content.splitlines()
-        lineNums = OrderedDict()
-        lineByTag = OrderedDict()
-
-        for lineNum, line in enumerate(lines):
-            if line.count("=") == 0:
-                parsed_line = [['name', line]]
-            elif line.count("=") > 1 and line.count(",") > 0:
-                # parsed_line = [e.split("=", maxsplit=1) for e in line.split(",")]
-                parts = line.split(',')
-                new_parts = []
-                for part in parts:
-                    if "=" in part:
-                        new_parts.append(part)
-                    else:
-                        new_parts[-1] += (',' + part)
-                parsed_line = [part.split("=", maxsplit=1) for part in new_parts]
-            else:
-                parsed_line = [line.split("=", maxsplit=1)]
-
-            parsed = [(tag, value, lineNum, line) for tag, value in parsed_line]
-
-            for item in parsed:
-                tag, value, lineNum, rawLine = item
-                if tag in self.keys():
-                    if type(self[tag]) is not list:
-                        self[tag] = [self[tag]]
-                        lineNums[tag] = [lineNums[tag]]
-                        lineByTag[tag] = [lineByTag[tag]]
-                    self[tag].append(value)
-                    lineNums[tag].append(lineNum)
-                    lineByTag[tag].append(rawLine)
-                else:
-                    self[tag] = value
-                    lineNums[tag] = lineNum
-                    lineByTag[tag] = rawLine
-
-        self.lineNums = lineNums
-        self.lines = lines
-        self.lineByTag = lineByTag
-    def copy(self):
-        return Object("\n".join(self.lines))
-    def change(self, tag, value, index=None):
+        parsed = objectFileLinesParser(content)
+        self.update(parsed[0])
+        super(OrderedDict, self).__setattr__('lineNums', parsed[1])
+        super(OrderedDict, self).__setattr__('lines', parsed[2])
+    
+    
+    def setExtra(self, key, value):
+        super(OrderedDict, self).__setattr__(key, value)
+    
+    def __getattr__(self, key):
+        return self[key]
+    
+    def __setattr__(self, tag, value, index=None):
+        if tag not in self.keys():
+            raise KeyError
+            return
         lineNum = self.lineNums[tag]
         if type(self[tag]) is list and index is not None:
             oldValue = self[tag][index]
@@ -129,6 +148,34 @@ class Object(OrderedDict):
         if tag == 'name': lhs = ""
         self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
         return Object("\n".join(self.lines))
+        
+    def copy(self):
+        return Object("\n".join(self.lines))
+    
+    def linesByTag(self, tag):
+        index = self.lineNums[tag]
+        if type(index) is list:
+            return [o.lines[i] for i in index]
+        else:
+            return o.lines[index]
+    
+#    def change(self, tag, value, index=None):
+#        lineNum = self.lineNums[tag]
+#        if type(self[tag]) is list and index is not None:
+#            oldValue = self[tag][index]
+#            self[tag][index] = value
+#            lineNum = lineNum[index]
+#        elif type(self[tag]) is not list:
+#            oldValue = self[tag]
+#            self[tag] = value
+#        else:
+#            raise TypeError
+#            return
+#        lhs = f"{tag}="
+#        if tag == 'name': lhs = ""
+#        self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
+#        return Object("\n".join(self.lines))
+    
     def save(self):
         
         content = "\n".join(self.lines)
@@ -136,7 +183,7 @@ class Object(OrderedDict):
         path = Path("./objects")
         id = self['id']
         save_txt(content, path / f"{id}.txt")
-        Path(path/"cache.fcz").unlink(missing_ok=True)
+#        Path(path/"cache.fcz").unlink(missing_ok=True)
         
         objects[id] = Object("\n".join(self.lines))
     
@@ -147,18 +194,31 @@ class Object(OrderedDict):
             b = self.lineNums['headIndex']
         else:
             b = self.lineNums['spriteID'][index_end]
-        return self.lines[a:b]
+        
+        o_copy = self.copy()
+        if type(o_copy['parent']) is list:
+            for i, v in enumerate(o_copy['parent']):
+                v2 = int(v)
+                if v2 < index_start or v2 >= index_end:
+                    v2 = -1
+                else:
+                    v2 = v2 - index_start
+                o_copy.change('parent', str(v2), i)
+        return o_copy.lines[a:b]
+    
+#        return self.lines[a:b]
+    
     def insertSprites(self, index, new_content):
         # first to last
         # back to front
         # 0 to N
         if type(new_content) is str: new_content = new_content.split("\n")
         old_numSprites = self['numSprites']
-        partiral_object = Object( "\n".join(new_content) )
-        if type(partiral_object['spriteID']) is str:
+        partial_object = Object( "\n".join(new_content) )
+        if type(partial_object['spriteID']) is str:
             extra_numSprites = 1
         else:
-            extra_numSprites = len(partiral_object['spriteID'])
+            extra_numSprites = len(partial_object['spriteID'])
         new_numSprites = str( int(old_numSprites) + extra_numSprites )
         self.change("numSprites", new_numSprites)
         
@@ -191,7 +251,16 @@ class Object(OrderedDict):
         self.update(new_object)
         self.lineNums.update(new_object.lineNums)
         self.lines[:] = new_object.lines
-        self.lineByTag.update(new_object.lineByTag)
+#        self.lineByTag.update(new_object.lineByTag)
+
+
+
+
+
+class Sprite(OrderedDict):
+    def __init__(self, content = ""):
+        odict, self.lineNums, self.lineNums, self.lineNums = objectFileLinesParser(content)
+        self.update(odict)
 
 
 class Transition():
@@ -320,7 +389,6 @@ class ListOfTransitions(list):
     def raw(self):
         return ListOfTransitions([t for t in self if (t.a, t.b, t.flag) in raw_transitions and raw_transitions[(t.a, t.b, t.flag)].toList()[2:4] == [t.c, t.d]])
         
-        
     
 class ListOfObjects(list):
     def __repr__(self):
@@ -353,21 +421,21 @@ class Category(ListOfObjects):
         
 
 
-def is_category(id):
+def isCategory(id):
     return id in categories.keys() and not categories[id].type == 'pattern' and not categories[id].type == 'probSet'
 
-def is_pattern(id):
+def isPattern(id):
     return id in categories.keys() and categories[id].type == 'pattern'
 
-def is_probSet(id):
+def isProbSet(id):
     return id in categories.keys() and categories[id].type == 'probSet'
 
-def parse_categories(trans):
+def parseCategories(trans):
     other_parts = trans.toList()[5:]
     trans = trans.toList()[:5]
     a, b, c, d, flag = trans
-    category_bool = [is_category(e) for e in trans[:-1]]
-    pattern_bool = [is_pattern(e) for e in trans[:-1]]
+    category_bool = [isCategory(e) for e in trans[:-1]]
+    pattern_bool = [isPattern(e) for e in trans[:-1]]
     if sum(category_bool) + sum(pattern_bool) == 0: return [Transition(*(trans + other_parts))]
 
     results = [trans]
@@ -377,25 +445,25 @@ def parse_categories(trans):
     category_items = [[], [], [], []]
 
     pattern_numObj = 0
-    if is_pattern(a):
+    if isPattern(a):
         pattern_numObj = len(categories[a])
-    elif is_pattern(b):
+    elif isPattern(b):
         pattern_numObj = len(categories[b])
 
     zipCat_numObj = 0
     parse_other_category = False
 
     for i, e in enumerate((a, b, c, d)):
-        if not is_category(e) and not is_pattern(e): continue
+        if not isCategory(e) and not isPattern(e): continue
         e_category_list = categories[e].copy()
-        if is_pattern(e) and len(e_category_list) == pattern_numObj:
+        if isPattern(e) and len(e_category_list) == pattern_numObj:
             pattern_items[i] += e_category_list
-        elif is_pattern(e) and len(e_category_list) != pattern_numObj:
+        elif isPattern(e) and len(e_category_list) != pattern_numObj:
             pass
-        elif is_category(e) and (a, b, c, d).count(e) > 1:
+        elif isCategory(e) and (a, b, c, d).count(e) > 1:
             zip_category_items[i] = e_category_list
             zipCat_numObj = len(e_category_list)
-        elif is_category(e):
+        elif isCategory(e):
             category_items[i] = e_category_list
             parse_other_category = True
 
@@ -473,7 +541,7 @@ def search(querystr, pool=None):
         results.append(id)
     return results
 
-def get_transition(a=None, b=None, c=None, d=None):
+def getTransition(a=None, b=None, c=None, d=None):
     results = ListOfTransitions()
     
     if a is not None and b is not None:
@@ -489,20 +557,20 @@ def get_transition(a=None, b=None, c=None, d=None):
             results.append( tran )
     
     for tran in results.copy():
-        probSet_transitions = parse_probSet(tran)
+        probSet_transitions = parseProbSet(tran)
         for probSet_transition in probSet_transitions:
             if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
                 results.append( probSet_transition )
     return results
 
-def parse_probSet(tran):
+def parseProbSet(tran):
     probSet_transitions = ListOfTransitions()
-    if is_probSet(tran.c):
+    if isProbSet(tran.c):
         for perhaps_newActor in categories[tran.c]:
             new_tran = tran.copy()
             new_tran.b = perhaps_newActor
             probSet_transitions.append( new_tran )
-    elif is_probSet(tran.d):
+    elif isProbSet(tran.d):
         for perhaps_newTarget in categories[tran.d]:
             new_tran = tran.copy()
             new_tran.d = perhaps_newTarget
@@ -510,7 +578,7 @@ def parse_probSet(tran):
     return probSet_transitions
 
 def make(id):
-    return ListOfTransitions(set(get_transition(c=id) + get_transition(d=id)))
+    return ListOfTransitions(set(getTransition(c=id) + getTransition(d=id)))
 
 def use(id):
     results = ListOfTransitions()
@@ -520,7 +588,7 @@ def use(id):
             results.append( tran )
             
     for tran in results.copy():
-        probSet_transitions = parse_probSet(tran)
+        probSet_transitions = parseProbSet(tran)
         for probSet_transition in probSet_transitions:
             if id == probSet_transition.a or id == probSet_transition.b:
                 results.append( probSet_transition )
@@ -658,7 +726,7 @@ if "regenerate_transitions" in options:
 
     for raw_tran in transitions_copy.values():
 
-        trans = parse_categories(raw_tran)
+        trans = parseCategories(raw_tran)
         if len(trans) == 1: continue
 
         for tran in trans:
@@ -714,221 +782,13 @@ else:
 
 uncraftables = ListOfObjects(objects.keys() - depths.keys())
 
-for oid, o in objects.items():
-    o.name = o['name']
-    o.id = int(o['id'])
-    if oid in uncraftables:
-        o.uncraftable = True
-    else:
-        o.uncraftable = False
+for oid, o in objects.items():    
+    o.setExtra('uncraftable', oid in uncraftables)
 
 print( "\nDONE LOADING\n" )
 
 
 
-1/0
 
-
-
-l = [int(e) for e in """7301
-7299
-7303
-14360
-7298
-7304
-14362
-14361
-7297
-7305
-14365
-14364
-14363
-7296""".splitlines()]
-
-l2 = {}
-
-for e in l:
-    i1 = int( names[e][ names[e].find("#") + 1 ] )
-    i2 = int( names[e][ names[e].find("#honey") + 6 ] )
-    
-    l2[i1, i2] = e
-
-
-l3 = ListOfObjects(range(14366, 14380))
-
-l4 = ListOfObjects([int(e) for e in """7306
-14381
-7329
-14383
-7327
-7325
-14386
-14387
-7323
-7321
-14390
-14391
-14392
-7310""".splitlines()])
-
-l5 = ListOfObjects(range(14393, 14407))
-
-
-
-# for e in search("bee hive outdated leaving"):
-#     o = objects[e]
-    
-#     i1 = int( names[e][ names[e].find("#") + 1 ] )
-    
-#     if 'empty' in o.name:
-#         new_name = o.name.replace('empty bee leaving', '#honey0 #bee')
-#     else:
-#         new_name = o.name.replace('bee leaving', '#honey' + str(i1) + ' #bee')
-    
-#     new_name = new_name.replace("(outdated) ", "")
-    
-#     print(e, new_name)
-    
-#     o.change('name', new_name)
-
-#     o.save()
-
-
-# 1/0
-
-
-
-
-
-# o = objects[7310]
-# sprites = o.getSpriteLines(13, 19)
-
-# id = 14379
-
-# for e in l:
-#     id += 1
-    
-#     i1 = int( names[e][ names[e].find("#") + 1 ] )
-#     i2 = int( names[e][ names[e].find("#honey") + 6 ] )
-    
-#     if i1 != 1 and i1 == i2: continue
-#     if i2 == 0: continue
-    
-#     o = objects[e]
-    
-#     o.change('id', id)
-#     o.change('name', o.name + " #bee")
-    
-#     numSprites = int(o['numSprites'])
-#     o.insertSprites(numSprites, sprites)
-    
-#     print(id, o.name + " #bee")
-
-#     o.save()
-
-
-
-# id = 14392
-
-# for e in l:
-#     id += 1
-    
-#     o = objects[e]
-#     o.change('id', id)
-#     o.change('name', o.name + " #justPlaced")
-    
-#     o.change('sounds', '505:0.250000,-1:0.0,-1:0.0,-1:0.0') # 496:0.250000,-1:0.0,-1:0.0,-1:0.0
-
-#     o.save()
-
-
-
-
-
-
-
-
-for i, e in enumerate(l):
-    i1 = int( names[e][ names[e].find("#") + 1 ] )
-    i2 = int( names[e][ names[e].find("#honey") + 6 ] )
-    
-    id = l2[i1, i2]
-    name = names[id]
-    
-    # na = 14358
-    # if "#honey0" in name: na = 7302
-    
-    # if i1-1 == 0:
-    #     nt = 7300    
-    # elif i2 > 0:
-    #     nt = l2[i1-1, i2-1]
-    # else:
-    #     nt = l2[i1-1, i2]
-        
-    # t = Transition(0, id, na, nt)
-    
-    
-    
-    # t2 = Transition(-1, l5[i], 0, l[i])
-    # t2.autoDecaySeconds = '1'
-    # t2.save()
-    
-    
-    # if i1 == 4:
-    #     continue
-    # else:
-    #     nt = l2[i1+1, i2]
-    
-    # t = Transition(7302, id, 0, nt)
-    # t.delete()
-    
-    # i2 = l.index(nt)
-    
-    # t1 = Transition(7302, id, 0, l5[i2])
-    # t1.save()
-    
-    
-    
-    # t = Transition(-1, id, 0, l4[i])
-    # t.autoDecaySeconds = '600'
-    
-    
-    # t = Transition(-1, l4[i], 0, 4567)
-    # t.move = '3'
-    # t.autoDecaySeconds = '1'
-    
-    # t = Transition(l4[i], -1, l3[i], 4567)
-    
-    
-    # t = Transition(-1, l3[i], 0, id)
-    # t.autoDecaySeconds = '1'
-    
-    
-    
-    # t = Transition(4567, l3[i], 0, id)
-
-    
-    # if i2 == i1:
-    #     nt = l2[i1, i2]
-    # else:
-    #     nt = l2[i1, i2+1]
-
-    # t = Transition(4569, id, 0, nt)
-    
-    
-    
-    # if i1 == 4: continue
-    # t = Transition(14358, id, 0, l2[i1+1, i2+1])
-    # t.delete()
-    
-    # i3 = l.index(l2[i1+1, i2+1])
-    # t2 = Transition(14358, id, 0, l5[i3])
-    
-    
-    # t2.save()
-    
-    
-    # print(t)
-
-
+#search("bottle -@ -stopper -funnel -blowpipe of")
 
