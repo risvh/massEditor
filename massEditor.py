@@ -1,7 +1,7 @@
 options = []
 
 
-#options.append("regenerate_all")
+# options.append("regenerate_all")
 #options.append("regenerate_categories")
 #options.append("regenerate_objects")
 #options.append("regenerate_transitions")
@@ -12,6 +12,10 @@ options.append("regenerate_smart")
 
 
     
+
+################################################################################
+############################################################# Util #############
+################################################################################
 
 import os
 from pathlib import Path
@@ -64,13 +68,11 @@ def objectFileLinesParser(content):
     odict = OrderedDict()
     lines = content.splitlines()
     lineNums = OrderedDict()
-#    lineByTag = OrderedDict()
 
     for lineNum, line in enumerate(lines):
         if line.count("=") == 0:
             parsed_line = [['name', line]]
         elif line.count("=") > 1 and line.count(",") > 0:
-            # parsed_line = [e.split("=", maxsplit=1) for e in line.split(",")]
             parts = line.split(',')
             new_parts = []
             for part in parts:
@@ -90,16 +92,13 @@ def objectFileLinesParser(content):
                 if type(odict[tag]) is not list:
                     odict[tag] = [odict[tag]]
                     lineNums[tag] = [lineNums[tag]]
-#                    lineByTag[tag] = [lineByTag[tag]]
                 odict[tag].append(value)
                 lineNums[tag].append(lineNum)
-#                lineByTag[tag].append(rawLine)
             else:
                 odict[tag] = value
                 lineNums[tag] = lineNum
-#                lineByTag[tag] = rawLine
     
-    return odict, lineNums, lines#, lineByTag
+    return odict, lineNums, lines
 
 
 
@@ -189,7 +188,7 @@ class Object(OrderedDict):
         content = "\n".join(self.lines)
         
         id = self['id']
-        path = Path("./objects") / f"{id}.txt"
+        path = Path("../output/objects") / f"{id}.txt"
         save_txt(content, path)
 #        Path(path/"cache.fcz").unlink(missing_ok=True)
         
@@ -333,7 +332,7 @@ class Transition():
         filename_flag = ""
         if self.flag != "": filename_flag = f"_{self.flag}"
         filename = f"{self.a}_{self.b}{filename_flag}.txt"
-        path = Path("./transitions/") / filename
+        path = Path("../output/transitions/") / filename
         save_txt(content, path)
 #        Path(path/"cache.fcz").unlink(missing_ok=True)
         
@@ -354,7 +353,7 @@ class Transition():
         return cls(actor, target, newActor, newTarget, flag, *items[2:])
     
     def delete(self):
-        path = Path("./transitions/")
+        path = Path("../output/transitions/")
         f = f"{self.a}_{self.b}.txt"
         if self.flag != "": f = f"{self.a}_{self.b}_{self.flag}.txt"
         if not Path(path/f).exists(): print(f"TRANSITION DELETE NOT EXIST: {f}")
@@ -647,6 +646,7 @@ def parent(id):
 ############################################################# Loading ##########
 ################################################################################
 
+# os.chdir("../output")
 
 categories = {}
 objects = {}
@@ -672,7 +672,7 @@ if Path("changed_files.txt").exists():
 
 if "regenerate_categories" in options:
     
-    path = Path("./categories")
+    path = Path("../output/categories")
     files = list_dir(path, file=1)
 
     for i, file in enumerate(files):
@@ -695,7 +695,7 @@ else:
 
 if "regenerate_objects" in options:
     
-    path = Path("./objects")
+    path = Path("../output/objects")
     files = list_dir(path, file=1)
 
     for i, file in enumerate(files):
@@ -745,7 +745,7 @@ autogen_transitions = False
 
 if "regenerate_transitions" in options:
     
-    path = Path("./transitions/")
+    path = Path("../output/transitions/")
     files = list_dir(path, file=1)
 
     for i, file in enumerate(files):
