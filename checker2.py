@@ -1,14 +1,14 @@
 options = []
 
 
-# options.append("regenerate_all")
-# options.append("regenerate_categories")
-# options.append("regenerate_objects")
-# options.append("regenerate_transitions")
-# options.append("regenerate_depths")
+#options.append("regenerate_all")
+#options.append("regenerate_categories")
+#options.append("regenerate_objects")
+#options.append("regenerate_transitions")
+#options.append("regenerate_depths")
 
 
-
+options.append("regenerate_smart")
 
 
     
@@ -36,6 +36,10 @@ def save_txt(text, path):
     with open(path, 'w', newline='\n') as f:
         f.write(text)
     return text
+
+def append_txt(text, path):
+    with open(path, "a") as f:
+        f.write(text)
 
 def save_pickle_file(filepath, j):
     with open(filepath, 'wb') as f:
@@ -116,6 +120,10 @@ class Pos(list):
 
 
 class Object(OrderedDict):
+    
+    def __getstate__(self): return self.__dict__
+    def __setstate__(self, d): self.__dict__.update(d)
+    
     def __init__(self, content = ""):
         parsed = objectFileLinesParser(content)
         self.update(parsed[0])
@@ -180,12 +188,16 @@ class Object(OrderedDict):
         
         content = "\n".join(self.lines)
         
-        path = Path("./objects")
         id = self['id']
-        save_txt(content, path / f"{id}.txt")
+        path = Path("./objects") / f"{id}.txt"
+        save_txt(content, path)
 #        Path(path/"cache.fcz").unlink(missing_ok=True)
         
         objects[id] = Object("\n".join(self.lines))
+        
+        append_txt(f"{str(path)}\n", "changed_files.txt")
+        
+        
     
     def getSpriteLines(self, index_start, index_end = None):
         if index_end is None: index_end = index_start + 1
@@ -265,53 +277,52 @@ class Sprite(OrderedDict):
 
 class Transition():
     
+    _fields = [
+            "a", "b", "c", "d",
+            "flag",
+            "autoDecaySeconds",
+            "actorMinUseFraction",
+            "targetMinUseFraction",
+            "reverseUseActorFlag",
+            "reverseUseTargetFlag",
+            "move",
+            "desiredMoveDist",
+            "noUseActorFlag",
+            "noUseTargetFlag"
+            ]
+    
+    _defaults = [None, None, None, None, "", "0", "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
+    
     def __init__(self, *args):
         if type(args[0]) is list: args = args[0]
         args = list(args)
-        defaults = [None, None, None, None, "", "0", "0.000000", "0.000000", '0', '0', '0', '1', '0', '0']
-        for i in range(len(args), 14):
-            args.append( defaults[i] )
-        [
-            self.a, self.b, self.c, self.d,
-            self.flag,
-            self.autoDecaySeconds,
-            self.actorMinUseFraction,
-            self.targetMinUseFraction,
-            self.reverseUseActorFlag,
-            self.reverseUseTargetFlag,
-            self.move,
-            self.desiredMoveDist,
-            self.noUseActorFlag,
-            self.noUseTargetFlag
-         ] = args
+        
+        for i, (field, default) in enumerate(zip(self._fields, self._defaults)):
+            value = default
+            if i < len(args): value = args[i]
+            setattr(self, field, value)
+        
+        
+        
     def __repr__(self):
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
         return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
+    
     def pprint(self):
         print( self.__repr__() )
+    
     def copy(self):
         return Transition(*self.toList())
-    def toList(self):
-        return [
-            self.a, self.b, self.c, self.d,
-            self.flag,
-            self.autoDecaySeconds,
-            self.actorMinUseFraction,
-            self.targetMinUseFraction,
-            self.reverseUseActorFlag,
-            self.reverseUseTargetFlag,
-            self.move,
-            self.desiredMoveDist,
-            self.noUseActorFlag,
-            self.noUseTargetFlag
-         ]
     
+    def toList(self):
+        return [ getattr(self, field) for field in self._fields ]
     
     def replace(self, old, new):
         if self.a == old: self.a = new
         if self.b == old: self.b = new
         if self.c == old: self.c = new
         if self.d == old: self.d = new
+        
     def save(self):
         if self.a is None or self.b is None or self.c is None or self.d is None: return
         
@@ -319,14 +330,16 @@ class Transition():
         content_list = [str(e) for e in content_list]
         content = " ".join(content_list)
         
-        path = Path("./transitions/")
         filename_flag = ""
         if self.flag != "": filename_flag = f"_{self.flag}"
         filename = f"{self.a}_{self.b}{filename_flag}.txt"
-        save_txt(content, path/filename)
-        Path(path/"cache.fcz").unlink(missing_ok=True)
+        path = Path("./transitions/") / filename
+        save_txt(content, path)
+#        Path(path/"cache.fcz").unlink(missing_ok=True)
         
         transitions[(self.a, self.b, self.flag)] = Transition(*self.toList())
+        
+        append_txt(f"{str(path)}\n", "changed_files.txt")
     
     @classmethod
     def load(cls, filename, content):
@@ -642,13 +655,17 @@ transitions = {}
 raw_transitions = {}
 depths = {}
 
+changed_files = []
 
 if "regenerate_all" in options:
     options += ["regenerate_categories", 
                 "regenerate_objects", 
                 "regenerate_transitions", 
                 "regenerate_depths"]
-    
+
+if Path("changed_files.txt").exists():
+    changed_files = read_txt('changed_files.txt').strip().splitlines()
+
 
 
 ############################################################# Categories
@@ -687,9 +704,8 @@ if "regenerate_objects" in options:
         if len(t.splitlines()) < 2: continue
 
         o = Object(t)
-        id = int( o['id'] )
-        name = o['name']
-        names[id] = name
+        id = int(o.id)
+        names[id] = o.name
         objects[id] = o
 
         if i % 500 == 0: print( "Objects:", i, len(files) )
@@ -697,11 +713,35 @@ if "regenerate_objects" in options:
     save_pickle_file('objects.pickle', objects)
     save_pickle_file('names.pickle', names)
     
+    for file in changed_files:
+        if "objects" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
+    
 else:
     objects = load_pickle_file('objects.pickle')
     names = load_pickle_file('names.pickle')
+    
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "objects" not in file: continue
+            path = Path(file)
+            id = int(path.stem)
+            
+            if not path.exists():
+                objects.pop(id, None)
+                names.pop(id, None)
+            else:
+                t = read_txt(file)
+                o = Object(t)
+                id = int(o.id)
+                names[id] = o.name
+                objects[id] = o
+        
 
 ############################################################# Transitions
+
+autogen_transitions = False
 
 if "regenerate_transitions" in options:
     
@@ -721,10 +761,9 @@ if "regenerate_transitions" in options:
 
 ############################################################# Auto-generating Transitions
 
-    transitions_copy = transitions.copy()
     raw_transitions = transitions.copy()
 
-    for raw_tran in transitions_copy.values():
+    for raw_tran in raw_transitions.values():
 
         trans = parseCategories(raw_tran)
         if len(trans) == 1: continue
@@ -737,9 +776,38 @@ if "regenerate_transitions" in options:
     save_pickle_file('transitions.pickle', transitions)
     save_pickle_file('raw_transitions.pickle', raw_transitions)
     
+    for file in changed_files:
+        if "transitions" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
+    
 else:
     transitions = load_pickle_file('transitions.pickle')
     raw_transitions = load_pickle_file('raw_transitions.pickle')
+    
+#    if "regenerate_smart" in options:
+#        for file in changed_files:
+#            if "transitions" not in file: continue
+#            path = Path(file)
+#            filename = int(path.stem)
+#            
+#            filename_items = filename.replace(".txt", "").split("_")
+#            actor, target = filename_items[:2]
+#            flag = ""
+#            if len(filename_items) > 2: flag = filename_items[2]
+#            key = (actor, target, flag)
+#            
+#            if not path.exists():
+#                raw_transitions.pop(key, None)
+#            else:
+#                t = read_txt(file)
+#                
+#                raw_tran = Transition.load(filename, t)
+#                transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
+#                
+#                id = int(o.id)
+#                names[id] = o.name
+#                objects[id] = o
 
 ############################################################# Generating Object Depth Map
 
