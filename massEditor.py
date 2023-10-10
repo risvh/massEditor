@@ -1,10 +1,10 @@
 options = []
 
 
-# options.append("regenerate_all")
-#options.append("regenerate_categories")
-#options.append("regenerate_objects")
-#options.append("regenerate_transitions")
+#options.append("regenerate_all")
+options.append("regenerate_categories")
+options.append("regenerate_objects")
+options.append("regenerate_transitions")
 #options.append("regenerate_depths")
 
 
@@ -115,7 +115,12 @@ class Pos(list):
     def __repr__(self):
         return f"{self[0]:.6f},{self[1]:.6f}"
 
-
+    @property
+    def x( self ):
+        return self[0]
+    @property
+    def y( self ):
+        return self[1]
 
 
 class Object(OrderedDict):
@@ -166,23 +171,6 @@ class Object(OrderedDict):
         else:
             return o.lines[index]
     
-#    def change(self, tag, value, index=None):
-#        lineNum = self.lineNums[tag]
-#        if type(self[tag]) is list and index is not None:
-#            oldValue = self[tag][index]
-#            self[tag][index] = value
-#            lineNum = lineNum[index]
-#        elif type(self[tag]) is not list:
-#            oldValue = self[tag]
-#            self[tag] = value
-#        else:
-#            raise TypeError
-#            return
-#        lhs = f"{tag}="
-#        if tag == 'name': lhs = ""
-#        self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
-#        return Object("\n".join(self.lines))
-    
     def save(self):
         
         content = "\n".join(self.lines)
@@ -198,7 +186,7 @@ class Object(OrderedDict):
         
         
     
-    def getSpriteLines(self, index_start, index_end = None):
+    def _getSpriteLines(self, index_start, index_end = None):
         if index_end is None: index_end = index_start + 1
         a = self.lineNums['spriteID'][index_start]
         if index_end >= int(self['numSprites']):
@@ -214,12 +202,27 @@ class Object(OrderedDict):
                     v2 = -1
                 else:
                     v2 = v2 - index_start
-                o_copy.change('parent', str(v2), i)
+                o_copy.__setattr__('parent', str(v2), i)
         return o_copy.lines[a:b]
     
 #        return self.lines[a:b]
+        
+#    def getSprites0(self, index_start, index_end = None):
+#        lines = self._getSpriteLines( index_start, index_end )
+#        temp_obj = Sprite( '\n'.join(lines) )
+#        indexes = temp_obj.lineNums['spriteID']
+#        indexes.append( len(temp_obj.lines) )
+#        r = []
+#        for i, v in enumerate(indexes[:-1]):
+#            s = Sprite( '\n'.join( lines[indexes[i]:indexes[i+1]] ) )
+#            r.append( s )
+#        return r
     
-    def insertSprites(self, index, new_content):
+    def getSprites(self, index_start, index_end = None):
+        lines = self._getSpriteLines( index_start, index_end )
+        return Object( '\n'.join(lines) )
+    
+    def _insertSprites(self, index, new_content):
         # first to last
         # back to front
         # 0 to N
@@ -262,7 +265,6 @@ class Object(OrderedDict):
         self.update(new_object)
         self.lineNums.update(new_object.lineNums)
         self.lines[:] = new_object.lines
-#        self.lineByTag.update(new_object.lineByTag)
 
 
 
@@ -270,7 +272,7 @@ class Object(OrderedDict):
 
 class Sprite(OrderedDict):
     def __init__(self, content = ""):
-        odict, self.lineNums, self.lineNums, self.lineNums = objectFileLinesParser(content)
+        odict, self.lineNums, self.lines = objectFileLinesParser(content)
         self.update(odict)
 
 
@@ -300,8 +302,8 @@ class Transition():
             value = default
             if i < len(args): value = args[i]
             setattr(self, field, value)
-        
-        
+            
+        self.raw = True
         
     def __repr__(self):
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
@@ -353,11 +355,16 @@ class Transition():
         return cls(actor, target, newActor, newTarget, flag, *items[2:])
     
     def delete(self):
-        path = Path("../output/transitions/")
-        f = f"{self.a}_{self.b}.txt"
-        if self.flag != "": f = f"{self.a}_{self.b}_{self.flag}.txt"
-        if not Path(path/f).exists(): print(f"TRANSITION DELETE NOT EXIST: {f}")
-        Path(path/f).unlink(missing_ok=True)
+        filename = f"{self.a}_{self.b}.txt"
+        if self.flag != "": filename = f"{self.a}_{self.b}_{self.flag}.txt"
+        path = Path("../output/transitions/") / filename
+
+        if not Path(path).exists(): print(f"TRANSITION DELETE NOT EXIST: {filename}")
+        Path(path).unlink() # missing_ok=True)
+        
+        transitions.pop((self.a, self.b, self.flag), None)
+        
+        append_txt(f"{str(path)}\n", "changed_files.txt")
 
 class ListOfTransitions(list):
     
@@ -399,7 +406,7 @@ class ListOfTransitions(list):
             transition.delete()
             
     def raw(self):
-        return ListOfTransitions([t for t in self if (t.a, t.b, t.flag) in raw_transitions and raw_transitions[(t.a, t.b, t.flag)].toList()[2:4] == [t.c, t.d]])
+        return ListOfTransitions([t for t in self if t.raw])
         
     
 class ListOfObjects(list):
@@ -415,6 +422,8 @@ class ListOfObjects(list):
         return ListOfObjects(set(self) - set(other))
     def search(self, querystr):
         return search(querystr, self)
+    def items(self):
+        return [ (i, objects[i]) for i in self ]
 
 class Category(ListOfObjects):
     @classmethod
@@ -520,6 +529,7 @@ def parseCategories(trans):
     
     for i, result in enumerate(results):
         results[i] = Transition( *(result + other_parts) )
+        results[i].raw = False
     return results
 
 
@@ -646,8 +656,6 @@ def parent(id):
 ############################################################# Loading ##########
 ################################################################################
 
-# os.chdir("../output")
-
 categories = {}
 objects = {}
 names = {}
@@ -711,7 +719,6 @@ if "regenerate_objects" in options:
         if i % 500 == 0: print( "Objects:", i, len(files) )
     
     save_pickle_file('objects.pickle', objects)
-    save_pickle_file('names.pickle', names)
     
     for file in changed_files:
         if "objects" in file:
@@ -720,7 +727,6 @@ if "regenerate_objects" in options:
     
 else:
     objects = load_pickle_file('objects.pickle')
-    names = load_pickle_file('names.pickle')
     
     if "regenerate_smart" in options:
         for file in changed_files:
@@ -737,7 +743,11 @@ else:
                 id = int(o.id)
                 names[id] = o.name
                 objects[id] = o
-        
+
+for id, o in objects.items():
+    names[id] = o.name
+    
+O = objects
 
 ############################################################# Transitions
 
@@ -761,9 +771,7 @@ if "regenerate_transitions" in options:
 
 ############################################################# Auto-generating Transitions
 
-    raw_transitions = transitions.copy()
-
-    for raw_tran in raw_transitions.values():
+    for raw_tran in transitions.copy().values():
 
         trans = parseCategories(raw_tran)
         if len(trans) == 1: continue
@@ -774,7 +782,6 @@ if "regenerate_transitions" in options:
                 transitions[a, b, flag] = tran
                 
     save_pickle_file('transitions.pickle', transitions)
-    save_pickle_file('raw_transitions.pickle', raw_transitions)
     
     for file in changed_files:
         if "transitions" in file:
@@ -783,31 +790,44 @@ if "regenerate_transitions" in options:
     
 else:
     transitions = load_pickle_file('transitions.pickle')
-    raw_transitions = load_pickle_file('raw_transitions.pickle')
     
-#    if "regenerate_smart" in options:
-#        for file in changed_files:
-#            if "transitions" not in file: continue
-#            path = Path(file)
-#            filename = int(path.stem)
-#            
-#            filename_items = filename.replace(".txt", "").split("_")
-#            actor, target = filename_items[:2]
-#            flag = ""
-#            if len(filename_items) > 2: flag = filename_items[2]
-#            key = (actor, target, flag)
-#            
-#            if not path.exists():
-#                raw_transitions.pop(key, None)
-#            else:
-#                t = read_txt(file)
-#                
-#                raw_tran = Transition.load(filename, t)
-#                transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
-#                
-#                id = int(o.id)
-#                names[id] = o.name
-#                objects[id] = o
+    raw_transitions = {}
+    for key, tran in transitions.items():
+        if tran.raw:
+            raw_transitions[key] = tran
+    
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "transitions" not in file: continue
+            path = Path(file)
+            filename = path.name
+            
+            filename_items = filename.replace(".txt", "").split("_")
+            actor, target = filename_items[:2]
+            flag = ""
+            if len(filename_items) > 2: flag = filename_items[2]
+            key = (int(actor), int(target), flag)
+            
+            if not path.exists():
+                raw_transitions.pop(key, None)
+            else:
+                t = read_txt(file)
+                
+                raw_tran = Transition.load(filename, t)
+                raw_transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
+        
+        transitions = raw_transitions
+        
+        for raw_tran in transitions.copy().values():
+    
+            trans = parseCategories(raw_tran)
+            if len(trans) == 1: continue
+    
+            for tran in trans:
+                a, b, c, d, flag = tran.toList()[:5]
+                if (a, b, flag) not in transitions.keys():
+                    transitions[a, b, flag] = tran
+                
 
 ############################################################# Generating Object Depth Map
 
@@ -831,7 +851,6 @@ if "regenerate_depths" in options:
         i += 1
 
         trans = use(id)
-#        trans = [t for t in transitions.values() if t.a == id or t.b == id]
         
         for tran in trans:
             if tran.a in depths.keys() and tran.b in depths.keys():
@@ -858,5 +877,148 @@ print( "\nDONE LOADING\n" )
 
 
 
-#search("bottle -@ -stopper -funnel -blowpipe of")
+
+1/0
+
+
+def copy_file(src, dst):
+    import shutil
+    shutil.copyfile(src, dst)
+    
+
+
+
+
+
+id_old = 10424
+id_new = 3673
+run = 0
+
+
+
+
+print(" ========================= ")
+p0 = Path("../../ohol/output/objects") / f"{id_new}.txt"
+t = read_txt(p0)
+new_o = Object(t)
+old_o = O[id_old]
+for key in ['id', 'name', 'containable', 'containSize', 'foodValue', 'numUses']:
+    print(key)
+    print(old_o[key])
+    print(new_o[key])
+    print(" -------------------- ")
+
+
+
+print(" ========================= ")
+print("animation:")
+
+animation_path = Path("../../ohol/output/animations")
+
+if (animation_path / f"{id_new}_0.txt").exists():
+    print("ANIMATIONS EXIST.")
+    
+    if run:
+        for filename in list_dir( animation_path, file=1 ):
+            if f"{id_new}_" in filename:
+                p0 = Path("../../ohol/output/animations") / filename
+                p1 = Path("../output/animations") / filename
+                copy_file(p0, p1)
+
+
+print(" ========================= ")
+print("sounds:")
+
+sound_path = Path("../output/sounds")
+
+for sound in new_o.sounds.split(","):
+    sound = int(sound[:sound.find(":")])
+    if sound == -1: continue
+    path = sound_path / f"{sound}.aiff"
+    if not path.exists():
+        print(f"SOUND NOT EXIST: {sound}")
+    
+print(" ========================= ")
+print("sprites:")
+    
+sprite_path = Path("../output/sprites")
+
+sprites = new_o.spriteID
+if type(sprites) is not list: sprites = [sprites]
+
+for sprite in sprites:
+    path = sprite_path / f"{sprite}.txt"
+    if not path.exists():
+        print(f"SPRITE NOT EXIST: {sprite}")
+    
+print(" ========================= ")
+print("categories:")
+print(getCategoriesOf(id_old))
+
+print(" ========================= ")
+print("use:")
+use(id_old).raw().pprint()
+
+if run:
+    for t0 in use(id_old).raw():
+        t1 = t0.copy()
+        t1.replace(id_old, id_new)
+        t0.delete()
+        t1.save()
+
+print(" ========================= ")
+print("make:")
+make(id_old).raw().pprint()
+
+if run:
+    for t0 in make(id_old).raw():
+        t1 = t0.copy()
+        t1.replace(id_old, id_new)
+        t0.delete()
+        t1.save()
+
+
+
+if run:
+    
+    p0 = Path("../../ohol/output/objects") / f"{id_new}.txt"
+    p1 = Path("../output/objects") / f"{id_new}.txt"
+    copy_file(p0, p1)
+    
+    old_o.name = "(outdated) " + old_o.name
+    old_o.save()
+    
+    decay_t = Transition(-1, id_old, 0, id_new)
+    decay_t.autoDecaySeconds = '1'
+    decay_t.noUseTargetFlag = '1'
+
+    decay_t.save()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
