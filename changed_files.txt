@@ -1,7 +1,1 @@
-..\output\transitions\14506_-1.txt
-..\output\transitions\14506_10945.txt
-..\output\transitions\14506_10947.txt
-..\output\transitions\14506_1483.txt
-..\output\transitions\14506_659.txt
-..\output\transitions\13465_2124.txt
-..\output\transitions\235_1483_LT.txt
+

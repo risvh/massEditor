@@ -2,9 +2,9 @@ options = []
 
 
 #options.append("regenerate_all")
-options.append("regenerate_categories")
-options.append("regenerate_objects")
-options.append("regenerate_transitions")
+#options.append("regenerate_categories")
+#options.append("regenerate_objects")
+#options.append("regenerate_transitions")
 #options.append("regenerate_depths")
 
 
@@ -160,6 +160,11 @@ class Object(OrderedDict):
         if tag == 'name': lhs = ""
         self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
         return Object("\n".join(self.lines))
+    
+    def getAsList(self, key):
+        r = self[key]
+        if type(r) is not list: r = [r]
+        return r
         
     def copy(self):
         return Object("\n".join(self.lines))
@@ -227,21 +232,22 @@ class Object(OrderedDict):
         # back to front
         # 0 to N
         if type(new_content) is str: new_content = new_content.split("\n")
-        old_numSprites = self['numSprites']
         partial_object = Object( "\n".join(new_content) )
-        if type(partial_object['spriteID']) is str:
-            extra_numSprites = 1
-        else:
-            extra_numSprites = len(partial_object['spriteID'])
-        new_numSprites = str( int(old_numSprites) + extra_numSprites )
-        self.change("numSprites", new_numSprites)
         
-        parents = self['parent']
-        if type(parents) is list:
-            for i, v in enumerate(parents):
-                v = int(v)
+        extra_numSprites = len(partial_object.getAsList('spriteID'))
+        old_numSprites = int(self.numSprites)
+        self.numSprites = str( old_numSprites + extra_numSprites )
+        
+        parents = self.getAsList('parent')
+        if len(parents) > 1:
+            for i, v in enumerate( [int(e) for e in parents] ):
                 if v >= index:
-                    self.change("parent", str(v + extra_numSprites), i)
+                    self.__setattr__("parent", str(v + extra_numSprites), i)
+        parents = partial_object.getAsList('parent')
+        if len(parents) > 1:
+            for i, v in enumerate( [int(e) for e in parents] ):
+                if v == -1: continue
+                partial_object.__setattr__("parent", str(v + extra_numSprites), i)
         
         if index >= int(old_numSprites):
             insertAt_lineNum = self.lineNums['headIndex']
@@ -251,21 +257,34 @@ class Object(OrderedDict):
         lines[insertAt_lineNum:insertAt_lineNum] = new_content
         
         content = "\n".join(lines)
-        new_object = Object(content)        
-        numSlots = int(new_object['numSlots'].split("#")[0])
-        
-        for i in range(numSlots + index, numSlots + index + extra_numSprites):
-            if int(new_object['parent'][i]) == -1: continue
-            if int(new_object['parent'][i]) >= extra_numSprites:
-                new_index = -1
-            else:
-                new_index = int(new_object['parent'][i]) + index
-            new_object.change("parent", str(new_index), i)
-        
+        new_object = Object(content)
         self.update(new_object)
         self.lineNums.update(new_object.lineNums)
         self.lines[:] = new_object.lines
-
+        
+    def _removeSprite(self, index):
+        
+        removeFrom_lineNum = self.lineNums['spriteID'][index]
+        if index + 1 >= int(self.numSprites):
+            removeTo_lineNum = self.lineNums['headIndex']
+        else:
+            removeTo_lineNum = self.lineNums['spriteID'][index+1]
+            
+        lines = self.lines
+        lines[removeFrom_lineNum:removeTo_lineNum] = []
+        
+        content = "\n".join(lines)
+        new_object = Object(content)
+        self.update(new_object)
+        self.lineNums.update(new_object.lineNums)
+        self.lines[:] = new_object.lines
+        
+        self.numSprites = str(int(self.numSprites) - 1)
+        
+        parents = self.getAsList('parent')
+        for i, v in enumerate( [int(e) for e in parents] ):
+            if v == index:
+                self.__setattr__("parent", "-1", i)
 
 
 
@@ -427,7 +446,7 @@ class ListOfObjects(list):
 
 class Category(ListOfObjects):
     @classmethod
-    def load(self, filename, content):
+    def load(self, content):
         lines = content.splitlines()
         list_str = content[content.find("\n", content.find("numObjects="))+1:].splitlines()
         list_int = [int(e.split()[0]) for e in list_str]
@@ -439,7 +458,26 @@ class Category(ListOfObjects):
         result.type = category_type
         return result
         
+    def save(self):
+        lines = []
+        lines.append(f"parentID={self.parentID}")
+        if self.type != "":
+            lines.append(self.type)
+        lines.append(f"numObjects={len(self)}")
+        lines.extend([str(e) for e in self])
+        content = '\n'.join(lines)
         
+        path = Path("../output/categories") / f"{self.parentID}.txt"
+        save_txt(content, path)
+#        Path(path/"cache.fcz").unlink(missing_ok=True)
+        
+        categories[self.parentID] = Category.load(content)
+        
+        append_txt(f"{str(path)}\n", "changed_files.txt")
+    
+    @property
+    def name(self):
+        return names[self.parentID]
 
 
 def isCategory(id):
@@ -690,14 +728,33 @@ if "regenerate_categories" in options:
         if len(lines) < 2: continue
 
         id = int(file.replace(".txt", ""))
-        categories[id] = Category.load(file, t)
+        categories[id] = Category.load(t)
 
         if i % 500 == 0: print( "Categories:", i, len(files) )
         
     save_pickle_file('categories.pickle', categories)
     
+    for file in changed_files:
+        if "categories" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
+    
 else:
     categories = load_pickle_file('categories.pickle')
+    
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "categories" not in file: continue
+            path = Path(file)
+            id = int(path.stem)
+            
+            if not path.exists():
+                categories.pop(id, None)
+            else:
+                t = read_txt(file)
+                c = Category.load(t)
+                id = int(c.parentID)
+                categories[id] = c
 
 ############################################################# Objects
 
@@ -873,150 +930,6 @@ for oid, o in objects.items():
     o.setExtra('uncraftable', oid in uncraftables)
 
 print( "\nDONE LOADING\n" )
-
-
-
-
-
-1/0
-
-
-def copy_file(src, dst):
-    import shutil
-    shutil.copyfile(src, dst)
-    
-
-
-
-
-
-id_old = 10424
-id_new = 3673
-run = 0
-
-
-
-
-print(" ========================= ")
-p0 = Path("../../ohol/output/objects") / f"{id_new}.txt"
-t = read_txt(p0)
-new_o = Object(t)
-old_o = O[id_old]
-for key in ['id', 'name', 'containable', 'containSize', 'foodValue', 'numUses']:
-    print(key)
-    print(old_o[key])
-    print(new_o[key])
-    print(" -------------------- ")
-
-
-
-print(" ========================= ")
-print("animation:")
-
-animation_path = Path("../../ohol/output/animations")
-
-if (animation_path / f"{id_new}_0.txt").exists():
-    print("ANIMATIONS EXIST.")
-    
-    if run:
-        for filename in list_dir( animation_path, file=1 ):
-            if f"{id_new}_" in filename:
-                p0 = Path("../../ohol/output/animations") / filename
-                p1 = Path("../output/animations") / filename
-                copy_file(p0, p1)
-
-
-print(" ========================= ")
-print("sounds:")
-
-sound_path = Path("../output/sounds")
-
-for sound in new_o.sounds.split(","):
-    sound = int(sound[:sound.find(":")])
-    if sound == -1: continue
-    path = sound_path / f"{sound}.aiff"
-    if not path.exists():
-        print(f"SOUND NOT EXIST: {sound}")
-    
-print(" ========================= ")
-print("sprites:")
-    
-sprite_path = Path("../output/sprites")
-
-sprites = new_o.spriteID
-if type(sprites) is not list: sprites = [sprites]
-
-for sprite in sprites:
-    path = sprite_path / f"{sprite}.txt"
-    if not path.exists():
-        print(f"SPRITE NOT EXIST: {sprite}")
-    
-print(" ========================= ")
-print("categories:")
-print(getCategoriesOf(id_old))
-
-print(" ========================= ")
-print("use:")
-use(id_old).raw().pprint()
-
-if run:
-    for t0 in use(id_old).raw():
-        t1 = t0.copy()
-        t1.replace(id_old, id_new)
-        t0.delete()
-        t1.save()
-
-print(" ========================= ")
-print("make:")
-make(id_old).raw().pprint()
-
-if run:
-    for t0 in make(id_old).raw():
-        t1 = t0.copy()
-        t1.replace(id_old, id_new)
-        t0.delete()
-        t1.save()
-
-
-
-if run:
-    
-    p0 = Path("../../ohol/output/objects") / f"{id_new}.txt"
-    p1 = Path("../output/objects") / f"{id_new}.txt"
-    copy_file(p0, p1)
-    
-    old_o.name = "(outdated) " + old_o.name
-    old_o.save()
-    
-    decay_t = Transition(-1, id_old, 0, id_new)
-    decay_t.autoDecaySeconds = '1'
-    decay_t.noUseTargetFlag = '1'
-
-    decay_t.save()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
