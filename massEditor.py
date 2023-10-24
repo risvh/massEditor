@@ -1,11 +1,11 @@
 options = []
 
 
-#options.append("regenerate_all")
-#options.append("regenerate_categories")
-#options.append("regenerate_objects")
-#options.append("regenerate_transitions")
-#options.append("regenerate_depths")
+# options.append("regenerate_all")
+# options.append("regenerate_categories")
+options.append("regenerate_objects")
+# options.append("regenerate_transitions")
+# options.append("regenerate_depths")
 
 
 options.append("regenerate_smart")
@@ -62,6 +62,7 @@ def load_pickle_file(filepath):
 ################################################################################
 
 
+import math
 from collections import OrderedDict
 
 def objectFileLinesParser(content):
@@ -326,7 +327,32 @@ class Transition():
         
     def __repr__(self):
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
-        return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"
+#        return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"        
+        
+        line_length = 32
+        max_lines = math.ceil(max([len(e) for e in (a_name, b_name, c_name, d_name)]) / line_length)
+        
+        a_name += ( " " * (max_lines * line_length - len(a_name)) )
+        b_name += ( " " * (max_lines * line_length - len(b_name)) )
+        c_name += ( " " * (max_lines * line_length - len(c_name)) )
+        d_name += ( " " * (max_lines * line_length - len(d_name)) )
+        
+        ss = []
+        for i in range(max_lines):
+            
+            s = ""
+            s += f"{str((self.a, self.b, self.c, self.d, self.flag)):<40}" if i == 0 else " " * 40
+            s += f"{a_name[i*line_length:(i+1)*line_length]:<{line_length}}"
+            s += " + " if i == 0 else "   "
+            s += f"{b_name[i*line_length:(i+1)*line_length]:<{line_length}}"
+            s += " = " if i == 0 else "   "
+            s += f"{c_name[i*line_length:(i+1)*line_length]:<{line_length}}"
+            s += " + " if i == 0 else "   "
+            s += f"{d_name[i*line_length:(i+1)*line_length]:<{line_length}}"
+            
+            ss.append(s)
+        
+        return '\n'.join(ss)
     
     def pprint(self):
         print( self.__repr__() )
@@ -654,19 +680,6 @@ def use(id):
                 results.append( probSet_transition )
     return results
 
-def guide(id):
-    a = make(id)
-    b = use(id)
-    if len(a) > 0:
-        print("\n")
-        print("MAKE")
-        print("\n")
-        for t in a: print(t)
-    if len(b) > 0:
-        print("\n")
-        print("USE")
-        print("\n")
-        for t in b: print(t)
         
 def getCategoriesOf(id):
     r = ListOfObjects()
@@ -675,20 +688,13 @@ def getCategoriesOf(id):
             r.append(cid)
     return r
 
-def child(id):
+def getObjectsBySprite(sprite_id):
     r = ListOfObjects()
-    for t in use(id):
-        if t.c > 0 and t.a != t.c: r.append(t.c)
-        if t.d > 0 and t.b != t.d: r.append(t.d)
+    for id, o in objects.items():
+        sprites = o.getAsList("spriteID")
+        if str(sprite_id) in sprites: r.append(id)
     return r
 
-
-def parent(id):
-    r = ListOfObjects()
-    for t in make(id):
-        if t.a > 0 and t.a != t.c: r.append(t.a)
-        if t.b > 0 and t.b != t.d: r.append(t.b)
-    return r
 
 ################################################################################
 ############################################################# Loading ##########
@@ -932,6 +938,16 @@ for oid, o in objects.items():
 print( "\nDONE LOADING\n" )
 
 
+# ### Find the objects using the color containment pos hack 
+# r = ListOfObjects()
+# for id, o in O.items():
+#     colors = o.color
+#     for color in colors:
+#         if "0.999" in color:
+#             r.append(id)
 
+
+
+    
 
 
