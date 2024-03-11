@@ -3,7 +3,7 @@ options = []
 
 # options.append("regenerate_all")
 # options.append("regenerate_categories")
-options.append("regenerate_objects")
+# options.append("regenerate_objects")
 # options.append("regenerate_transitions")
 # options.append("regenerate_depths")
 
@@ -396,7 +396,7 @@ class Transition():
         newActor, newTarget = items[:2]
         actor, target, newActor, newTarget = [int(e) for e in (actor, target, newActor, newTarget)]
         flag = ""
-        if len(filename_items) > 2: flag = filename_items[2]
+        if len(filename_items) > 2: flag = '_'.join(filename_items[2:])
         return cls(actor, target, newActor, newTarget, flag, *items[2:])
     
     def delete(self):
@@ -469,6 +469,8 @@ class ListOfObjects(list):
         return search(querystr, self)
     def items(self):
         return [ (i, objects[i]) for i in self ]
+
+LO = ListOfObjects
 
 class Category(ListOfObjects):
     @classmethod
@@ -626,6 +628,67 @@ def search(querystr, pool=None):
         if mismatch: continue
         results.append(id)
     return results
+
+def split(regex_delimiters, s):
+    import re
+    terms = re.split(regex_delimiters, s)
+    terms = list(filter(None, terms))
+    return terms
+
+def stripComment(s):
+    if s.find("#") != -1:
+        s = s[:s.find("#")]
+    return s
+
+def minitechSortingAlgorithm(rs, q):
+    
+    q = q.upper()
+    terms = split('\s|\#|\,', q)
+    scores_name = {}
+    scores_description = {}
+    object_depths = {}
+    object_ids = {}
+    
+    for r in rs:
+        
+        description = names[r].upper()
+        name = stripComment(description)
+        
+        tokens_name = split('\s|\#|\,', name)
+        matchCount_name = 0
+        
+        for term in terms:
+            for token in tokens_name:
+                if token == term:
+                    matchCount_name += 1
+                    
+        score_name = matchCount_name / len(tokens_name)
+        scores_name[r] = score_name
+        
+        tokens_description = split('\s|\#|\,', description)
+        matchCount_description = 0
+        
+        for term in terms:
+            for token in tokens_description:
+                if token == term:
+                    matchCount_description += 1
+                    
+        score_description = matchCount_description / len(tokens_description)
+        scores_description[r] = score_description
+    
+        depth = 9999
+        if r in depths.keys(): depth = depths[r]
+        object_depths[r] = depth
+        object_ids[r] = r
+    
+    rs2 = sorted(rs, key = lambda x: (-scores_name[x], -scores_description[x], object_depths[x], object_ids[x]))
+    return ListOfObjects(rs2)
+        
+    
+def searchAndSort(q):
+    rs = search(q)
+    rs = minitechSortingAlgorithm(rs, q)
+    return rs
 
 def getTransition(a=None, b=None, c=None, d=None):
     results = ListOfTransitions()
@@ -938,6 +1001,8 @@ for oid, o in objects.items():
 print( "\nDONE LOADING\n" )
 
 
+
+
 # ### Find the objects using the color containment pos hack 
 # r = ListOfObjects()
 # for id, o in O.items():
@@ -948,6 +1013,106 @@ print( "\nDONE LOADING\n" )
 
 
 
+# ### Find all wall-destructive transitions
+# def isWall(id):
+#     if id <= 0:
+#         return False
+#     o = O[id]
+#     if 'wallLayer' in o.keys() and o.wallLayer == '1':
+#         return True
+#     if 'floorHugging' in o.keys() and o.floorHugging == '1':
+#         return True
+#     return False
+#
+# for id, o in O.items():
+#     if isWall(id):
+#         # print(id, o.name)
+#         ts = getTransition(b=id)
+#         for t in ts:
+#             if t.a > 0 and t.c > 0 and t.d not in categories and t.b == id and not isWall(t.d):
+#                 t.pprint()
+        
+
+
+# def isFloor(id):
+#     if id <= 0:
+#         return False
+#     if id not in O.keys():
+#         return False
+#     o = O[id]
+#     if 'floor' in o.keys() and o.floor == '1':
+#         return True
+#     return False
+
+
+
+
+
+
+def getNumUses(id):
+    if id <= 0: return -1
+    if id not in O.keys(): return -1
+    o = O[id]
+    if 'numUses' not in o.keys(): return -1
+    return int(o.numUses.split(',')[0])
+
+def getUseChance(id):
+    if id <= 0: return -1
+    if id not in O.keys(): return -1
+    o = O[id]
+    if 'numUses' not in o.keys(): return -1
+    if ',' not in o.numUses: return -1
+    return float(o.numUses.split(',')[1])
+
+def hasUse(id):
+    numUses = getNumUses(id)
+    if numUses > 1: return True
+    return False
+
+def validUsePair(a, b):
+    if hasUse(a) and hasUse(b):
+        if getNumUses(a) == getNumUses(b):
+            if getUseChance(a) == getUseChance(b):
+                return True
+    return False
+
+def transUseType(t):
+    if not( hasUse(t.a) or hasUse(t.b) or hasUse(t.c) or hasUse(t.d) ): return 0
+    if validUsePair(t.a, t.c): return 1 # actor pass-through
+    if validUsePair(t.b, t.d): return 2 # target pass-through
+    if validUsePair(t.a, t.d): return 3 # cross-pass-through from actor to newTarget
+    if validUsePair(t.b, t.c): return 4 # cross-pass-through from target to newActor
+    return -1 
+
+
+
+
+o = O[3636]
+
+
+import math
+from PIL import Image, ImageDraw
+dimension = (512, 512)
+img = Image.new("RGBA", dimension, (255, 255, 255, 255))
+
+for sprite, pos, rot, hFlip in zip(o.spriteID, o.pos, o.rot, o.hFlip):
+    sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
+    sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
+    sprite_text_parts = sprite_text.split()
+    anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
+    pos = Pos(pos)
     
+    if hFlip == '1': sprite_tga = sprite_tga.transpose(Image.FLIP_LEFT_RIGHT)
+    sprite_w, sprite_h = sprite_tga.size
+    rotate_center = (sprite_w//2 + anchor_pos[0], sprite_h//2 + anchor_pos[1])
+    sprite_tga = sprite_tga.rotate(-float(rot) * 360, center=rotate_center, expand=True)
+    sprite_w, sprite_h = sprite_tga.size
+    offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
+    
+    img.paste(sprite_tga, offset, mask=sprite_tga)
+
+img = img.crop((img.size[0]//4, img.size[1]//8, img.size[0]-img.size[0]//4, img.size[1]//2+img.size[1]//8))    
+# img = img.resize((img.size[0]//2, img.size[1]//2))
+img.show()
 
 
