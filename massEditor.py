@@ -1084,18 +1084,17 @@ def transUseType(t):
     if validUsePair(t.b, t.c): return 4 # cross-pass-through from target to newActor
     return -1 
 
+id = 3636
 
+# def drawObject(id):
+o = O[id]
 
+from PIL import Image
 
-o = O[3636]
-
-
-import math
-from PIL import Image, ImageDraw
 dimension = (512, 512)
 img = Image.new("RGBA", dimension, (255, 255, 255, 255))
 
-for sprite, pos, rot, hFlip in zip(o.spriteID, o.pos, o.rot, o.hFlip):
+for sprite, pos, rot, hFlip in zip(o.getAsList("spriteID"), o.getAsList("pos"), o.getAsList("rot"), o.getAsList("hFlip")):
     sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
     sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
     sprite_text_parts = sprite_text.split()
@@ -1113,6 +1112,60 @@ for sprite, pos, rot, hFlip in zip(o.spriteID, o.pos, o.rot, o.hFlip):
 
 img = img.crop((img.size[0]//4, img.size[1]//8, img.size[0]-img.size[0]//4, img.size[1]//2+img.size[1]//8))    
 # img = img.resize((img.size[0]//2, img.size[1]//2))
-img.show()
+
+# img.show()
+    
+    # return img
 
 
+
+
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel
+import sys
+from PyQt5.QtGui import QPixmap
+class Window(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.title = "PyQt5 Adding Image To Label"
+        self.top = 200
+        self.left = 500
+        self.width = 800
+        self.height = 600
+        self.InitWindow()
+ 
+    def InitWindow(self):
+        # self.setWindowIcon(QtGui.QIcon("icon.png"))
+        self.setWindowTitle(self.title)
+        self.setGeometry(self.left, self.top, self.width, self.height)
+        vbox = QHBoxLayout()
+        
+        # pixmap = QPixmap("112165.png")
+        im = img
+        # im2 = im.convert("RGBA")
+        # data = im2.tobytes("raw", "BGRA")
+        data = im.tobytes("raw", "BGRA")
+        qim = QtGui.QImage(data, im.width, im.height, QtGui.QImage.Format_ARGB32)
+        pixmap = QtGui.QPixmap.fromImage(qim)
+        
+        
+        labelImage = QLabel(self)
+        labelImage.setPixmap(pixmap)
+        
+        labelImage2 = QLabel(self)
+        labelImage2.setPixmap(pixmap)
+        
+        labelImage3 = QLabel(self)
+        labelImage3.setPixmap(pixmap)
+        
+        vbox.addWidget(labelImage)
+        vbox.addWidget(labelImage2)
+        vbox.addWidget(labelImage3)
+        self.setLayout(vbox)
+        self.show()
+ 
+ 
+ 
+App = QApplication(sys.argv)
+window = Window()
+sys.exit(App.exec_())
