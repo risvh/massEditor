@@ -173,9 +173,9 @@ class Object(OrderedDict):
     def linesByTag(self, tag):
         index = self.lineNums[tag]
         if type(index) is list:
-            return [o.lines[i] for i in index]
+            return [self.lines[i] for i in index]
         else:
-            return o.lines[index]
+            return self.lines[index]
     
     def save(self):
         
@@ -877,8 +877,6 @@ O = objects
 
 ############################################################# Transitions
 
-autogen_transitions = False
-
 if "regenerate_transitions" in options:
     
     path = Path("../output/transitions/")
@@ -1084,88 +1082,104 @@ def transUseType(t):
     if validUsePair(t.b, t.c): return 4 # cross-pass-through from target to newActor
     return -1 
 
-id = 3636
 
-# def drawObject(id):
-o = O[id]
 
-from PIL import Image
 
-dimension = (512, 512)
-img = Image.new("RGBA", dimension, (255, 255, 255, 255))
 
-for sprite, pos, rot, hFlip in zip(o.getAsList("spriteID"), o.getAsList("pos"), o.getAsList("rot"), o.getAsList("hFlip")):
-    sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
-    sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
-    sprite_text_parts = sprite_text.split()
-    anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
-    pos = Pos(pos)
+
+
+
+
+
+
+
+
+def drawObject(id):
     
-    if hFlip == '1': sprite_tga = sprite_tga.transpose(Image.FLIP_LEFT_RIGHT)
-    sprite_w, sprite_h = sprite_tga.size
-    rotate_center = (sprite_w//2 + anchor_pos[0], sprite_h//2 + anchor_pos[1])
-    sprite_tga = sprite_tga.rotate(-float(rot) * 360, center=rotate_center, expand=True)
-    sprite_w, sprite_h = sprite_tga.size
-    offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
+    o = O[id]
     
-    img.paste(sprite_tga, offset, mask=sprite_tga)
-
-img = img.crop((img.size[0]//4, img.size[1]//8, img.size[0]-img.size[0]//4, img.size[1]//2+img.size[1]//8))    
-# img = img.resize((img.size[0]//2, img.size[1]//2))
-
-# img.show()
+    from PIL import Image
     
-    # return img
+    import numpy as np
+    
+    dimension = (1024, 1024)
+    img = Image.new("RGBA", dimension, (0, 0, 0, 0))
+    sprite_tga = 0
+    
+    def best_fit(oldsize, picsize):
+        new_width, new_height = picsize
+        old_width, old_height = oldsize
+        if new_width * old_height < new_height * old_width:
+            new_height = max(1, old_height * new_width // old_width)
+        else:
+            new_width = max(1, old_width * new_height // old_height)
+        return (new_width, new_height)
+    
+    def iconize(img):
+        originalSize = img.size
+        objectSize = (64, 64)
+        iconSize = (96, 96)
+        bestSize = originalSize
+        if not (originalSize[0] < objectSize[0] and originalSize[1] < objectSize[1]):
+            bestSize = best_fit(originalSize, objectSize)
+            img = img.resize(bestSize)
+        img2 = Image.new("RGBA", iconSize, (0, 0, 0, 0))
+        offset = ((iconSize[0] - bestSize[0])//2, (iconSize[1] - bestSize[1])//2)
+        img2.paste(img, offset, mask=img)
+        return img2
+    
+    def dodge(front,back):
+        front = np.asarray(front)
+        back = np.asarray(back)
+        
+        result=back*256.0/(256.0-front) 
+        result[result>255]=255
+        result[back==255]=255
+        
+        return Image.fromarray(result.astype('uint8'), 'RGBA')
+    
+    additiveBlend_sprites = []
+    if 'spritesAdditiveBlend' in o.keys():
+        additiveBlend_sprites = [int(e) for e in o.spritesAdditiveBlend.split(',')]
+    
+    for i, (sprite, pos, rot, hFlip, color) in enumerate(zip(o.getAsList("spriteID"), o.getAsList("pos"), o.getAsList("rot"), o.getAsList("hFlip"), o.getAsList("color"))):
+        
+        sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
+        sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
+        sprite_text_parts = sprite_text.split()
+        anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
+        pos = Pos(pos)
+        
+        if color != '1.000000,1.000000,1.000000':
+            arr = np.array(np.asarray(sprite_tga).astype('float'))
+            r, g, b, a = np.rollaxis(arr, axis=-1)
+            r1, g1, b1 = [float(e) for e in color.split(",")]
+            r = r * r1
+            g = g * g1
+            b = b * b1
+            arr = np.dstack((r, g, b, a))
+            sprite_tga = Image.fromarray(arr.astype('uint8'), 'RGBA')
+        
+        if hFlip == '1': sprite_tga = sprite_tga.transpose(Image.FLIP_LEFT_RIGHT)
+        sprite_w, sprite_h = sprite_tga.size
+        rotate_center = (sprite_w//2 + anchor_pos[0], sprite_h//2 + anchor_pos[1])
+        sprite_tga = sprite_tga.rotate(-float(rot) * 360, center=rotate_center, expand=True)
+        sprite_w, sprite_h = sprite_tga.size
+        offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
+        
+        if i in additiveBlend_sprites and not i == 0:
+            temp = Image.new("RGBA", dimension, (0, 0, 0, 0))
+            temp.paste(sprite_tga, offset, mask=sprite_tga)
+            img = dodge(temp, img)
+        else:
+            img.paste(sprite_tga, offset, mask=sprite_tga)
+    
+    img = img.crop(img.getbbox())
+    img = iconize(img)
+    
+    # img.show()
+    
+    return img
 
 
 
-
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel
-import sys
-from PyQt5.QtGui import QPixmap
-class Window(QDialog):
-    def __init__(self):
-        super().__init__()
-        self.title = "PyQt5 Adding Image To Label"
-        self.top = 200
-        self.left = 500
-        self.width = 800
-        self.height = 600
-        self.InitWindow()
- 
-    def InitWindow(self):
-        # self.setWindowIcon(QtGui.QIcon("icon.png"))
-        self.setWindowTitle(self.title)
-        self.setGeometry(self.left, self.top, self.width, self.height)
-        vbox = QHBoxLayout()
-        
-        # pixmap = QPixmap("112165.png")
-        im = img
-        # im2 = im.convert("RGBA")
-        # data = im2.tobytes("raw", "BGRA")
-        data = im.tobytes("raw", "BGRA")
-        qim = QtGui.QImage(data, im.width, im.height, QtGui.QImage.Format_ARGB32)
-        pixmap = QtGui.QPixmap.fromImage(qim)
-        
-        
-        labelImage = QLabel(self)
-        labelImage.setPixmap(pixmap)
-        
-        labelImage2 = QLabel(self)
-        labelImage2.setPixmap(pixmap)
-        
-        labelImage3 = QLabel(self)
-        labelImage3.setPixmap(pixmap)
-        
-        vbox.addWidget(labelImage)
-        vbox.addWidget(labelImage2)
-        vbox.addWidget(labelImage3)
-        self.setLayout(vbox)
-        self.show()
- 
- 
- 
-App = QApplication(sys.argv)
-window = Window()
-sys.exit(App.exec_())
