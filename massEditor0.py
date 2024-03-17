@@ -1,13 +1,17 @@
+options = []
 
-categories = {}
-objects = {}
-names = {}
-transitions = {}
-raw_transitions = {}
-depths = {}
 
-O = {}
-C = {}
+# options.append("regenerate_all")
+# options.append("regenerate_categories")
+# options.append("regenerate_objects")
+# options.append("regenerate_transitions")
+# options.append("regenerate_depths")
+
+
+options.append("regenerate_smart")
+
+
+    
 
 ################################################################################
 ############################################################# Util #############
@@ -322,7 +326,6 @@ class Transition():
         self.raw = True
         
     def __repr__(self):
-        global names
         a_name, b_name, c_name, d_name = [ names[e] if e in names.keys() else str(e) for e in ( self.a, self.b, self.c, self.d ) ]
 #        return f"{str((self.a, self.b, self.c, self.d, self.flag)):<32}{a_name:<32} + {b_name:<32} = {c_name:<32} + {d_name:<32}"        
         
@@ -468,7 +471,6 @@ class ListOfObjects(list):
         return [ (i, objects[i]) for i in self ]
 
 LO = ListOfObjects
-
 
 class Category(ListOfObjects):
     @classmethod
@@ -688,7 +690,7 @@ def searchAndSort(q):
     rs = minitechSortingAlgorithm(rs, q)
     return rs
 
-def getTransitions(a=None, b=None, c=None, d=None):
+def getTransition(a=None, b=None, c=None, d=None):
     results = ListOfTransitions()
     
     if a is not None and b is not None:
@@ -710,8 +712,6 @@ def getTransitions(a=None, b=None, c=None, d=None):
                 results.append( probSet_transition )
     return results
 
-gT = getTransitions
-
 def parseProbSet(tran):
     probSet_transitions = ListOfTransitions()
     if isProbSet(tran.c):
@@ -727,7 +727,7 @@ def parseProbSet(tran):
     return probSet_transitions
 
 def make(id):
-    return ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
+    return ListOfTransitions(set(getTransition(c=id) + getTransition(d=id)))
 
 def use(id):
     results = ListOfTransitions()
@@ -759,149 +759,189 @@ def getObjectsBySprite(sprite_id):
     return r
 
 
-def init(options=[], verbose=False):
+################################################################################
+############################################################# Loading ##########
+################################################################################
+
+categories = {}
+objects = {}
+names = {}
+transitions = {}
+raw_transitions = {}
+depths = {}
+
+changed_files = []
+
+if "regenerate_all" in options:
+    options += ["regenerate_categories", 
+                "regenerate_objects", 
+                "regenerate_transitions", 
+                "regenerate_depths"]
+
+if Path("changed_files.txt").exists():
+    changed_files = read_txt('changed_files.txt').strip().splitlines()
+
+
+
+############################################################# Categories
+
+if "regenerate_categories" in options:
     
-    ################################################################################
-    ############################################################# Loading ##########
-    ################################################################################
-    
-    global categories
-    global objects
-    global names
-    global transitions
-    global raw_transitions
-    global depths
-    
-    global O
-    global C
-    
-    changed_files = []
-    
-    if "regenerate_all" in options:
-        options += ["regenerate_categories", 
-                    "regenerate_objects", 
-                    "regenerate_transitions", 
-                    "regenerate_depths"]
-    
-    if Path("changed_files.txt").exists():
-        changed_files = read_txt('changed_files.txt').strip().splitlines()
-    
-    
-    
-    ############################################################# Categories
-    
-    if "regenerate_categories" in options:
+    path = Path("../output/categories")
+    files = list_dir(path, file=1)
+
+    for i, file in enumerate(files):
+        if ".txt" not in file: continue
+        t = read_txt(path / file)
+        lines = t.splitlines()
+        if len(lines) < 2: continue
+
+        id = int(file.replace(".txt", ""))
+        categories[id] = Category.load(t)
+
+        if i % 500 == 0: print( "Categories:", i, len(files) )
         
-        path = Path("../output/categories")
-        files = list_dir(path, file=1)
+    save_pickle_file('categories.pickle', categories)
     
-        for i, file in enumerate(files):
-            if ".txt" not in file: continue
-            t = read_txt(path / file)
-            lines = t.splitlines()
-            if len(lines) < 2: continue
+    for file in changed_files:
+        if "categories" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
     
-            id = int(file.replace(".txt", ""))
-            categories[id] = Category.load(t)
+else:
+    categories = load_pickle_file('categories.pickle')
     
-            if verbose and i % 500 == 0: print( "Categories:", f"{i} / {len(files)}" )
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "categories" not in file: continue
+            path = Path(file)
+            id = int(path.stem)
             
-        save_pickle_file('categories.pickle', categories)
-        
-        for file in changed_files:
-            if "categories" in file:
-                changed_files.remove(file)
-        save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
-        
-    else:
-        categories = load_pickle_file('categories.pickle')
-        
-        if "regenerate_smart" in options:
-            for file in changed_files:
-                if "categories" not in file: continue
-                path = Path(file)
-                id = int(path.stem)
-                
-                if not path.exists():
-                    categories.pop(id, None)
-                else:
-                    t = read_txt(file)
-                    c = Category.load(t)
-                    id = int(c.parentID)
-                    categories[id] = c
+            if not path.exists():
+                categories.pop(id, None)
+            else:
+                t = read_txt(file)
+                c = Category.load(t)
+                id = int(c.parentID)
+                categories[id] = c
+
+############################################################# Objects
+
+if "regenerate_objects" in options:
     
-    C = categories
-    
-    ############################################################# Objects
-    
-    if "regenerate_objects" in options:
-        
-        path = Path("../output/objects")
-        files = list_dir(path, file=1)
-    
-        for i, file in enumerate(files):
-            if ".txt" not in file: continue
-            t = read_txt(path / file)
-            if len(t.splitlines()) < 2: continue
-    
-            o = Object(t)
-            id = int(o.id)
-            names[id] = o.name
-            objects[id] = o
-    
-            if verbose and i % 500 == 0: print( "Objects:", f"{i} / {len(files)}" )
-        
-        save_pickle_file('objects.pickle', objects)
-        
-        for file in changed_files:
-            if "objects" in file:
-                changed_files.remove(file)
-        save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
-        
-    else:
-        objects = load_pickle_file('objects.pickle')
-        
-        if "regenerate_smart" in options:
-            for file in changed_files:
-                if "objects" not in file: continue
-                path = Path(file)
-                id = int(path.stem)
-                
-                if not path.exists():
-                    objects.pop(id, None)
-                    names.pop(id, None)
-                else:
-                    t = read_txt(file)
-                    o = Object(t)
-                    id = int(o.id)
-                    names[id] = o.name
-                    objects[id] = o
-    
-    for id, o in objects.items():
+    path = Path("../output/objects")
+    files = list_dir(path, file=1)
+
+    for i, file in enumerate(files):
+        if ".txt" not in file: continue
+        t = read_txt(path / file)
+        if len(t.splitlines()) < 2: continue
+
+        o = Object(t)
+        id = int(o.id)
         names[id] = o.name
+        objects[id] = o
+
+        if i % 500 == 0: print( "Objects:", i, len(files) )
+    
+    save_pickle_file('objects.pickle', objects)
+    
+    for file in changed_files:
+        if "objects" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
+    
+else:
+    objects = load_pickle_file('objects.pickle')
+    
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "objects" not in file: continue
+            path = Path(file)
+            id = int(path.stem)
+            
+            if not path.exists():
+                objects.pop(id, None)
+                names.pop(id, None)
+            else:
+                t = read_txt(file)
+                o = Object(t)
+                id = int(o.id)
+                names[id] = o.name
+                objects[id] = o
+
+for id, o in objects.items():
+    names[id] = o.name
+    
+O = objects
+
+############################################################# Transitions
+
+if "regenerate_transitions" in options:
+    
+    path = Path("../output/transitions/")
+    files = list_dir(path, file=1)
+
+    for i, file in enumerate(files):
+        if ".txt" not in file: continue
+        t = read_txt(path / file)
+        items = t.split()
+        if len(items) < 2: continue
+
+        raw_tran = Transition.load(file, t)
+        transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
+
+        if i % 500 == 0: print( "Transitions:", i, len(files) )
+
+############################################################# Auto-generating Transitions
+
+    for raw_tran in transitions.copy().values():
+
+        trans = parseCategories(raw_tran)
+        if len(trans) == 1: continue
+
+        for tran in trans:
+            a, b, c, d, flag = tran.toList()[:5]
+            if (a, b, flag) not in transitions.keys():
+                transitions[a, b, flag] = tran
+                
+    save_pickle_file('transitions.pickle', transitions)
+    
+    for file in changed_files:
+        if "transitions" in file:
+            changed_files.remove(file)
+    save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
+    
+else:
+    transitions = load_pickle_file('transitions.pickle')
+    
+    raw_transitions = {}
+    for key, tran in transitions.items():
+        if tran.raw:
+            raw_transitions[key] = tran
+    
+    if "regenerate_smart" in options:
+        for file in changed_files:
+            if "transitions" not in file: continue
+            path = Path(file)
+            filename = path.name
+            
+            filename_items = filename.replace(".txt", "").split("_")
+            actor, target = filename_items[:2]
+            flag = ""
+            if len(filename_items) > 2: flag = filename_items[2]
+            key = (int(actor), int(target), flag)
+            
+            if not path.exists():
+                raw_transitions.pop(key, None)
+            else:
+                t = read_txt(file)
+                
+                raw_tran = Transition.load(filename, t)
+                raw_transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
         
-    O = objects
-    
-    ############################################################# Transitions
-    
-    if "regenerate_transitions" in options:
+        transitions = raw_transitions
         
-        path = Path("../output/transitions/")
-        files = list_dir(path, file=1)
-    
-        for i, file in enumerate(files):
-            if ".txt" not in file: continue
-            t = read_txt(path / file)
-            items = t.split()
-            if len(items) < 2: continue
-    
-            raw_tran = Transition.load(file, t)
-            transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
-    
-            if verbose and i % 500 == 0: print( "Transitions:", f"{i} / {len(files)}" )
-    
-    ############################################################# Auto-generating Transitions
-    
         for raw_tran in transitions.copy().values():
     
             trans = parseCategories(raw_tran)
@@ -911,120 +951,235 @@ def init(options=[], verbose=False):
                 a, b, c, d, flag = tran.toList()[:5]
                 if (a, b, flag) not in transitions.keys():
                     transitions[a, b, flag] = tran
-                    
-        save_pickle_file('transitions.pickle', transitions)
-        
-        for file in changed_files:
-            if "transitions" in file:
-                changed_files.remove(file)
-        save_txt('\n'.join(changed_files) + '\n', 'changed_files.txt')
-        
-    else:
-        transitions = load_pickle_file('transitions.pickle')
-        
-        raw_transitions = {}
-        for key, tran in transitions.items():
-            if tran.raw:
-                raw_transitions[key] = tran
-        
-        if "regenerate_smart" in options:
-            for file in changed_files:
-                if "transitions" not in file: continue
-                path = Path(file)
-                filename = path.name
                 
-                filename_items = filename.replace(".txt", "").split("_")
-                actor, target = filename_items[:2]
-                flag = ""
-                if len(filename_items) > 2: flag = filename_items[2]
-                key = (int(actor), int(target), flag)
-                
-                if not path.exists():
-                    raw_transitions.pop(key, None)
-                else:
-                    t = read_txt(file)
+
+############################################################# Generating Object Depth Map
+
+natural_objects = [key for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000']
+
+if "regenerate_depths" in options:
+
+    horizon = list(natural_objects)
+
+    for id in natural_objects:
+        depths[id] = 0
+    depths[0] = 0
+    depths[-1] = 0
+    depths[-2] = 0
+
+    i = 0
+    while len(horizon) > 0:
+
+        id = horizon.pop(0)
+        if i % 500 == 0: print( f"{len(depths.keys())} / {len(objects.keys())}, horizon: {len(horizon)}, id: {id}" )
+        i += 1
+
+        trans = use(id)
+        
+        for tran in trans:
+            if tran.a in depths.keys() and tran.b in depths.keys():
+                next_depth = max( depths[tran.a], depths[tran.b] ) + 1
+                if tran.c > 0 and tran.c not in depths.keys(): horizon.append(tran.c)
+                if tran.d > 0 and tran.d not in depths.keys(): horizon.append(tran.d)
+                depths[tran.c] = next_depth if tran.c not in depths.keys() else min(depths[tran.c], next_depth)
+                depths[tran.d] = next_depth if tran.d not in depths.keys() else min(depths[tran.d], next_depth)
                     
-                    raw_tran = Transition.load(filename, t)
-                    raw_transitions[raw_tran.a, raw_tran.b, raw_tran.flag] = raw_tran
-            
-            transitions = raw_transitions
-            
-            for raw_tran in transitions.copy().values():
-        
-                trans = parseCategories(raw_tran)
-                if len(trans) == 1: continue
-        
-                for tran in trans:
-                    a, b, c, d, flag = tran.toList()[:5]
-                    if (a, b, flag) not in transitions.keys():
-                        transitions[a, b, flag] = tran
-                    
     
-    ############################################################# Generating Object Depth Map
-    
-    natural_objects = [key for key, value in objects.items() if objects[key]['mapChance'].split('#')[0] != '0.000000']
-    
-    if "regenerate_depths" in options:
-    
-        horizon = list(natural_objects)
-    
-        for id in natural_objects:
-            depths[id] = 0
-        depths[0] = 0
-        depths[-1] = 0
-        depths[-2] = 0
-    
-        i = 0
-        while len(horizon) > 0:
-    
-            id = horizon.pop(0)
-            if verbose and i % 500 == 0: print( f"{len(depths.keys())} / {len(objects.keys())}, horizon: {len(horizon)}, id: {id}" )
-            i += 1
-    
-            trans = use(id)
-            
-            for tran in trans:
-                if tran.a in depths.keys() and tran.b in depths.keys():
-                    next_depth = max( depths[tran.a], depths[tran.b] ) + 1
-                    if tran.c > 0 and tran.c not in depths.keys(): horizon.append(tran.c)
-                    if tran.d > 0 and tran.d not in depths.keys(): horizon.append(tran.d)
-                    depths[tran.c] = next_depth if tran.c not in depths.keys() else min(depths[tran.c], next_depth)
-                    depths[tran.d] = next_depth if tran.d not in depths.keys() else min(depths[tran.d], next_depth)
-                        
-        
-        save_pickle_file('depths.pickle', depths)
-    
-    else:
-        depths = load_pickle_file('depths.pickle')
-        
-    
-    uncraftables = ListOfObjects(objects.keys() - depths.keys())
-    
-    for oid, o in objects.items():    
-        o.setExtra('uncraftable', oid in uncraftables)
+    save_pickle_file('depths.pickle', depths)
 
-    print( "\nDONE LOADING\n" )
+else:
+    depths = load_pickle_file('depths.pickle')
+    
+
+uncraftables = ListOfObjects(objects.keys() - depths.keys())
+
+for oid, o in objects.items():    
+    o.setExtra('uncraftable', oid in uncraftables)
+
+print( "\nDONE LOADING\n" )
 
 
-if __name__ == '__main__':
-    
-    init(options=[
-        # "regenerate_all",
-        # "regenerate_categories",
-        # "regenerate_objects",
-        # "regenerate_transitions",
-        # "regenerate_depths",
-        "regenerate_smart",
-        ])
-    
-    """
-    Do stuff here
-    
-    For example, you can start with:
-        objects[30] - returns the Object Wild Gooseberry Bush which ID is 30
-        search("horse cart -outdated") - return a list of Objects with name matching the query
-        use(30) - return a list of Transitions that uses Wild Gooseberry Bush
+
+
+# ### Find the objects using the color containment pos hack 
+# r = ListOfObjects()
+# for id, o in O.items():
+#     colors = o.color
+#     for color in colors:
+#         if "0.999" in color:
+#             r.append(id)
+
+
+
+# ### Find all wall-destructive transitions
+# def isWall(id):
+#     if id <= 0:
+#         return False
+#     o = O[id]
+#     if 'wallLayer' in o.keys() and o.wallLayer == '1':
+#         return True
+#     if 'floorHugging' in o.keys() and o.floorHugging == '1':
+#         return True
+#     return False
+#
+# for id, o in O.items():
+#     if isWall(id):
+#         # print(id, o.name)
+#         ts = getTransition(b=id)
+#         for t in ts:
+#             if t.a > 0 and t.c > 0 and t.d not in categories and t.b == id and not isWall(t.d):
+#                 t.pprint()
         
-    """
+
+
+# def isFloor(id):
+#     if id <= 0:
+#         return False
+#     if id not in O.keys():
+#         return False
+#     o = O[id]
+#     if 'floor' in o.keys() and o.floor == '1':
+#         return True
+#     return False
+
+
+
+
+
+
+def getNumUses(id):
+    if id <= 0: return -1
+    if id not in O.keys(): return -1
+    o = O[id]
+    if 'numUses' not in o.keys(): return -1
+    return int(o.numUses.split(',')[0])
+
+def getUseChance(id):
+    if id <= 0: return -1
+    if id not in O.keys(): return -1
+    o = O[id]
+    if 'numUses' not in o.keys(): return -1
+    if ',' not in o.numUses: return -1
+    return float(o.numUses.split(',')[1])
+
+def hasUse(id):
+    numUses = getNumUses(id)
+    if numUses > 1: return True
+    return False
+
+def validUsePair(a, b):
+    if hasUse(a) and hasUse(b):
+        if getNumUses(a) == getNumUses(b):
+            if getUseChance(a) == getUseChance(b):
+                return True
+    return False
+
+def transUseType(t):
+    if not( hasUse(t.a) or hasUse(t.b) or hasUse(t.c) or hasUse(t.d) ): return 0
+    if validUsePair(t.a, t.c): return 1 # actor pass-through
+    if validUsePair(t.b, t.d): return 2 # target pass-through
+    if validUsePair(t.a, t.d): return 3 # cross-pass-through from actor to newTarget
+    if validUsePair(t.b, t.c): return 4 # cross-pass-through from target to newActor
+    return -1 
+
+
+
+
+
+
+
+
+
+
+
+
+
+def drawObject(id):
     
-    pass
+    o = O[id]
+    
+    from PIL import Image
+    
+    import numpy as np
+    
+    dimension = (1024, 1024)
+    img = Image.new("RGBA", dimension, (0, 0, 0, 0))
+    sprite_tga = 0
+    
+    def best_fit(oldsize, picsize):
+        new_width, new_height = picsize
+        old_width, old_height = oldsize
+        if new_width * old_height < new_height * old_width:
+            new_height = max(1, old_height * new_width // old_width)
+        else:
+            new_width = max(1, old_width * new_height // old_height)
+        return (new_width, new_height)
+    
+    def iconize(img):
+        originalSize = img.size
+        objectSize = (64, 64)
+        iconSize = (96, 96)
+        bestSize = originalSize
+        if not (originalSize[0] < objectSize[0] and originalSize[1] < objectSize[1]):
+            bestSize = best_fit(originalSize, objectSize)
+            img = img.resize(bestSize)
+        img2 = Image.new("RGBA", iconSize, (0, 0, 0, 0))
+        offset = ((iconSize[0] - bestSize[0])//2, (iconSize[1] - bestSize[1])//2)
+        img2.paste(img, offset, mask=img)
+        return img2
+    
+    def dodge(front,back):
+        front = np.asarray(front)
+        back = np.asarray(back)
+        
+        result=back*256.0/(256.0-front) 
+        result[result>255]=255
+        result[back==255]=255
+        
+        return Image.fromarray(result.astype('uint8'), 'RGBA')
+    
+    additiveBlend_sprites = []
+    if 'spritesAdditiveBlend' in o.keys():
+        additiveBlend_sprites = [int(e) for e in o.spritesAdditiveBlend.split(',')]
+    
+    for i, (sprite, pos, rot, hFlip, color) in enumerate(zip(o.getAsList("spriteID"), o.getAsList("pos"), o.getAsList("rot"), o.getAsList("hFlip"), o.getAsList("color"))):
+        
+        sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
+        sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
+        sprite_text_parts = sprite_text.split()
+        anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
+        pos = Pos(pos)
+        
+        if color != '1.000000,1.000000,1.000000':
+            arr = np.array(np.asarray(sprite_tga).astype('float'))
+            r, g, b, a = np.rollaxis(arr, axis=-1)
+            r1, g1, b1 = [float(e) for e in color.split(",")]
+            r = r * r1
+            g = g * g1
+            b = b * b1
+            arr = np.dstack((r, g, b, a))
+            sprite_tga = Image.fromarray(arr.astype('uint8'), 'RGBA')
+        
+        if hFlip == '1': sprite_tga = sprite_tga.transpose(Image.FLIP_LEFT_RIGHT)
+        sprite_w, sprite_h = sprite_tga.size
+        rotate_center = (sprite_w//2 + anchor_pos[0], sprite_h//2 + anchor_pos[1])
+        sprite_tga = sprite_tga.rotate(-float(rot) * 360, center=rotate_center, expand=True)
+        sprite_w, sprite_h = sprite_tga.size
+        offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
+        
+        if i in additiveBlend_sprites and not i == 0:
+            temp = Image.new("RGBA", dimension, (0, 0, 0, 0))
+            temp.paste(sprite_tga, offset, mask=sprite_tga)
+            img = dodge(temp, img)
+        else:
+            img.paste(sprite_tga, offset, mask=sprite_tga)
+    
+    img = img.crop(img.getbbox())
+    img = iconize(img)
+    
+    # img.show()
+    
+    return img
+
+
+
