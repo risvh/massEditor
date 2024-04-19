@@ -20,13 +20,10 @@ from draw import drawObject
 
 
 
-# ### Find the objects using the color containment pos hack 
-# r = ListOfObjects()
-# for id, o in O.items():
-#     colors = o.color
-#     for color in colors:
-#         if "0.999" in color:
-#             r.append(id)
+
+
+    
+
 
 
 
@@ -100,3 +97,128 @@ def transUseType(t):
     if validUsePair(t.a, t.d): return 3 # cross-pass-through from actor to newTarget
     if validUsePair(t.b, t.c): return 4 # cross-pass-through from target to newActor
     return -1 
+
+
+
+
+
+
+
+
+
+
+
+# r = ListOfObjects()
+# for id, o in O.items():
+#     ss = [int(e) for e in o.spriteID]
+#     if 2637 in ss or 2638 in ss:
+#         r.append(id)
+    
+# r2 = r.search("sack")
+
+# for id, o in r2.items():
+#     sid = '2637'
+#     ss = o.getAsList('spriteID')
+#     if sid not in ss: sid = '2638'
+#     index = o.getAsList('spriteID').index(sid)
+#     o._removeSprite(index)
+#     o.save()
+
+
+    
+# r = search("sack #2")
+# for id, o in r.items():
+#     if id == 12080: continue
+#     t = "\n".join(o.lines)
+#     t = t.replace("speedMult=1.000000", "speedMult=1.000000\ncontainOffset=0,2")
+#     o2 = Object(t)
+#     o2.save()
+    
+    
+    
+    
+    
+# r = ListOfObjects()
+# for id, o in O.items():
+#     if 'numSlots' in o.keys() and 'slotStyle' in o.keys() and int(o.numSlots[0]) > 0 and o.slotStyle == '1':
+#         r.append(id)
+    
+# r = r.search("-grave -tarr")
+
+# for id, o in r.items():
+#     slotPos = o.getAsList('slotPos')
+#     slotPos2 = []
+#     for i, s in enumerate(slotPos):
+#         s = Pos(s)
+#         s = s + Pos(0, 6)
+#         o.__setattr__("slotPos", str(s), i)
+#     o.save()
+#     print(len(slotPos), o.name)
+    
+    
+# r = ListOfObjects()
+# for id, o in O.items():
+#     add = False
+#     if 'containable' in o.keys() and o.containable == '0': continue
+#     if 'rot' in o.keys():
+#         rots = [float(e) for e in o.getAsList('rot')]
+#         for rot in rots:
+#             rot = rot - math.floor(rot)
+#             if rot != 0.25 and rot != 0.75 and rot != 0:
+#                 add = True
+#     if add:
+#         r.append(id)
+
+
+
+
+
+
+
+
+
+
+
+# sprites = list_dir("../output/sprites/", file=1)
+# sprites = [e.replace(".tga","") for e in sprites if '.tga' in e]
+
+
+# os = LO([4935,4940,4943,4944,4945,4946,4947,4948,4949])
+# r = LO()
+# missing = []
+
+# for id, o in os.items():
+#     ss = o.getAsList('spriteID')
+#     for s in ss:
+#         if s not in sprites:
+#             r.append(id)
+#             missing.append(s)
+#             # break
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
