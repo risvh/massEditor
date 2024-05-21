@@ -136,9 +136,23 @@ def drawObject(id):
             size_check_img = additiveBlend(size_check_temp, size_check_img)
         else:
             
-            temp = Image.new("RGBA", sprite_tga.size, blacka)
-            temp.paste(sprite_tga, (0, 0), mask=sprite_tga)
-            sprite_tga = temp
+            # mask = np.array(sprite_tga)
+            # mask[mask/255<0.5] = 0
+            # maskRGB = mask[...,:3]
+            # maskA = mask[...,3]
+            # maskRGB[:] = 0
+            # maskA[maskA!=255] = 0
+            # mask = np.dstack((maskRGB,maskA)).astype(np.uint8)
+            # mask = Image.fromarray(mask.astype('uint8'), 'RGBA')
+            
+            # temp = Image.new("RGBA", sprite_tga.size, blacka)
+            # temp.paste(sprite_tga, (0, 0), mask=sprite_tga)
+            # sprite_tga = temp
+            
+            blacka_bg = Image.new("RGBA", sprite_tga.size, blacka)
+            
+            for m in range(3):
+                sprite_tga = Image.composite(sprite_tga, blacka_bg, sprite_tga)
             
             img.paste(sprite_tga, offset, mask=sprite_tga)
             size_check_img.paste(sprite_tga, offset, mask=sprite_tga)
@@ -147,3 +161,4 @@ def drawObject(id):
     img = iconize(img)
     
     return img
+
