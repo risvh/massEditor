@@ -136,7 +136,9 @@ class Object(OrderedDict):
         super(OrderedDict, self).__setattr__(key, value)
     
     def __getattr__(self, key):
-        return self[key]
+        if key in self.keys():
+            return self[key]
+        return None
     
     def __setattr__(self, tag, value, index=None):
         if tag not in self.keys():
