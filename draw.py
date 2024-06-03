@@ -18,6 +18,19 @@ blue = (0,0,255,255)
 
 backgroundColor = grey
 
+def transparent_color(color):
+    new_color = (color[0], color[1], color[2], 0)
+    return new_color
+
+def remove_transparent_background(img):
+    arr = np.array(img)
+#    r, g, b, a = np.rollaxis(arr, axis=-1)
+    a = arr[...,3]
+    rgb = arr[...,:3]
+    rgb[a==0] = 0
+    arr = np.dstack((rgb, a))
+    return Image.fromarray(arr.astype('uint8'), 'RGBA')
+
 def setBackgroundColor(color):
     global backgroundColor
     backgroundColor = color
@@ -56,7 +69,7 @@ def oldAttemptAtAdditiveBlend(front,back):
     
     return Image.fromarray(result.astype('uint8'), 'RGBA')
 
-def additiveBlend(front, back):
+def blend(mode, front, back):
     nsrc = np.asarray(front)
     ndst = np.asarray(back)
     
@@ -70,7 +83,10 @@ def additiveBlend(front, back):
     
     
     srcScale = nsrc[...,3]/255.0 # GL_SRC_ALPHA
-    dstScale = np.ones(ndst[...,3].shape) # GL_ONE
+    if mode == 'additive':
+        dstScale = np.ones(ndst[...,3].shape) # GL_ONE
+    elif mode == 'normal':
+        dstScale = 1 - nsrc[...,3]/255.0 # GL_ONE_MINUS_SRC_ALPHA
     
     # Work out resultant alpha channel
     outA = srcA * srcScale + dstA * dstScale
@@ -86,14 +102,14 @@ def additiveBlend(front, back):
     
     return Image.fromarray(outRGBA.astype('uint8'), 'RGBA')
 
+
+
 def drawObject(id):
     
     o = massEditor.objects[id]
     
     dimension = (1024, 1024)
-    img = Image.new("RGBA", dimension, backgroundColor)
-    size_check_img = Image.new("RGBA", dimension, blacka)
-    sprite_tga = 0
+    img = Image.new("RGBA", dimension, transparent_color(backgroundColor))
     
     additiveBlend_sprites = []
     if 'spritesAdditiveBlend' in o.keys():
@@ -126,38 +142,34 @@ def drawObject(id):
         offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
         
         
+        
         if i in additiveBlend_sprites:
-            temp = Image.new("RGBA", dimension, black)
-            temp.paste(sprite_tga, offset, mask=sprite_tga)
-            img = additiveBlend(temp, img)
             
-            size_check_temp = Image.new("RGBA", dimension, blacka)
-            size_check_temp.paste(sprite_tga, offset, mask=sprite_tga)
-            size_check_img = additiveBlend(size_check_temp, size_check_img)
+            temp = Image.new("RGBA", dimension, blacka)
+            temp.paste(sprite_tga, offset, mask=sprite_tga)
+            img = blend('additive', temp, img)
+            
         else:
             
-            # mask = np.array(sprite_tga)
-            # mask[mask/255<0.5] = 0
-            # maskRGB = mask[...,:3]
-            # maskA = mask[...,3]
-            # maskRGB[:] = 0
-            # maskA[maskA!=255] = 0
-            # mask = np.dstack((maskRGB,maskA)).astype(np.uint8)
-            # mask = Image.fromarray(mask.astype('uint8'), 'RGBA')
+#            blacka_bg = Image.new("RGBA", sprite_tga.size, blacka)
+#            
+#            for m in range(3):
+#                sprite_tga = Image.composite(sprite_tga, blacka_bg, sprite_tga)
+#                
+#            img.paste(sprite_tga, offset, mask=sprite_tga)
             
-            # temp = Image.new("RGBA", sprite_tga.size, blacka)
-            # temp.paste(sprite_tga, (0, 0), mask=sprite_tga)
-            # sprite_tga = temp
+            temp = Image.new("RGBA", dimension, blacka)
+            temp.paste(sprite_tga, offset, mask=sprite_tga)
+            img = blend('normal', temp, img)
             
-            blacka_bg = Image.new("RGBA", sprite_tga.size, blacka)
-            
-            for m in range(3):
-                sprite_tga = Image.composite(sprite_tga, blacka_bg, sprite_tga)
-            
-            img.paste(sprite_tga, offset, mask=sprite_tga)
-            size_check_img.paste(sprite_tga, offset, mask=sprite_tga)
+
+    background = Image.new("RGBA", dimension, backgroundColor)
+    background.paste(img, (0, 0), mask=img)
     
-    img = img.crop(size_check_img.getbbox())
+    img = remove_transparent_background(img)
+    
+    img = background.crop(img.getbbox())
+    
     img = iconize(img)
     
     return img
