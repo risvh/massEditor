@@ -131,6 +131,13 @@ class Object(OrderedDict):
         super(OrderedDict, self).__setattr__('lineNums', parsed[1])
         super(OrderedDict, self).__setattr__('lines', parsed[2])
     
+    def keySearch(self, query=""):
+        query = query.lower()
+        ks = list(self.keys())
+        ks.sort()
+        if query != "":
+            ks = [e for e in ks if query in e.lower()]
+        return ks
     
     def setExtra(self, key, value):
         super(OrderedDict, self).__setattr__(key, value)
@@ -451,7 +458,8 @@ class ListOfTransitions(list):
             
     def raw(self):
         return ListOfTransitions([t for t in self if t.raw])
-        
+
+LT = ListOfTransitions
     
 class ListOfObjects(list):
     def __repr__(self):
@@ -1026,7 +1034,14 @@ if __name__ == '__main__':
         objects[30] - returns the Object Wild Gooseberry Bush which ID is 30
         search("horse cart -outdated") - return a list of Objects with name matching the query
         use(30) - return a list of Transitions that uses Wild Gooseberry Bush
-        
+        draw(3338) - draw a Glass Bottle
+    
     """
+    
+    # ## Example: print all objects that are blocking but not permanent
+    # for id, o in objects.items():
+    #     if o.permanent == '0' and o.blocksWalking == '1':
+    #         print(id, o.name)
+    
     
     pass

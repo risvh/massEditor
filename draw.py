@@ -104,7 +104,7 @@ def blend(mode, front, back):
 
 
 
-def drawObject(id):
+def draw(id):
     
     o = massEditor.objects[id]
     
