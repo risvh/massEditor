@@ -470,8 +470,12 @@ class ListOfObjects(list):
             else:
                 r.append( f"{str(e):<8}" )
         return "\n".join(r)
+    def __add__(self, other):
+        return ListOfObjects(set(list(self) + list(other)))
     def __sub__(self, other):
         return ListOfObjects(set(self) - set(other))
+    def intersection(self, other):
+        return  self - (self - other)
     def search(self, querystr):
         return search(querystr, self)
     def items(self):
