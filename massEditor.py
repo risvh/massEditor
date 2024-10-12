@@ -731,17 +731,33 @@ def parseProbSet(tran):
     if isProbSet(tran.c):
         for perhaps_newActor in categories[tran.c]:
             new_tran = tran.copy()
-            new_tran.b = perhaps_newActor
+            new_tran.raw = False
+            new_tran.c = perhaps_newActor
             probSet_transitions.append( new_tran )
     elif isProbSet(tran.d):
         for perhaps_newTarget in categories[tran.d]:
             new_tran = tran.copy()
+            new_tran.raw = False
             new_tran.d = perhaps_newTarget
             probSet_transitions.append( new_tran )
     return probSet_transitions
 
 def make(id):
-    return ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
+    results = ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
+    
+    probs = LO([e for e in getCategoriesOf(id) if isProbSet(e)])
+    if len(probs) > 0:
+        trans = ListOfTransitions()
+        for prob in probs:
+            probSet_transitions = make(prob).raw()
+            for probSet_transition in probSet_transitions:
+                ts = parseProbSet(probSet_transition)
+                for t in ts:
+                    if t not in trans and (t.c == id or t.d == id):
+                        trans.append(t)
+        results = ListOfTransitions(set(results + trans))
+    
+    return results
 
 def use(id):
     results = ListOfTransitions()
@@ -771,6 +787,31 @@ def getObjectsBySprite(sprite_id):
         sprites = o.getAsList("spriteID")
         if str(sprite_id) in sprites: r.append(id)
     return r
+
+def checkObjectsForMissingSprites():
+    sprites = list_dir("../OneLifeData7/sprites", file=True)
+    sprites = [e.replace(".tga", "") for e in sprites if ".tga" in e]
+    
+    missing_sprites = []
+    
+    for id, o in O.items():
+        for s in o.getAsList('spriteID'):
+            if s not in sprites:
+                missing_sprites.append(s)
+                
+    return missing_sprites
+
+def getSortedDepthList():
+    rs = []
+    
+    for id, o in O.items():
+        if O[id].uncraftable: continue
+        rs.append((depths[id], id, names[id]))
+    
+    rs.sort(key=lambda x: -x[0])
+    
+    return rs
+    
 
 
 def init(options=[], verbose=False):
