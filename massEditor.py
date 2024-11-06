@@ -328,7 +328,7 @@ class Transition():
             if i < len(args): value = args[i]
             setattr(self, field, value)
             
-        self.raw = True
+        self.raw = 0 # the smaller the value the more raw it is
         
     def __repr__(self):
         global names
@@ -457,7 +457,7 @@ class ListOfTransitions(list):
             transition.delete()
             
     def raw(self):
-        return ListOfTransitions([t for t in self if t.raw])
+        return ListOfTransitions([t for t in self if t.raw == 0])
 
 LT = ListOfTransitions
     
@@ -530,6 +530,7 @@ def isProbSet(id):
     return id in categories.keys() and categories[id].type == 'probSet'
 
 def parseCategories(trans):
+    raw_tran = trans.copy()
     other_parts = trans.toList()[5:]
     trans = trans.toList()[:5]
     a, b, c, d, flag = trans
@@ -607,7 +608,7 @@ def parseCategories(trans):
     
     for i, result in enumerate(results):
         results[i] = Transition( *(result + other_parts) )
-        results[i].raw = False
+        results[i].raw = sum([e1 != e2 for e1, e2 in zip(raw_tran.toList()[:4], results[i].toList()[:4])])
     return results
 
 
@@ -641,115 +642,40 @@ def search(querystr, pool=None):
         results.append(id)
     return results
 
-def split(regex_delimiters, s):
-    import re
-    terms = re.split(regex_delimiters, s)
-    terms = list(filter(None, terms))
-    return terms
 
-def stripComment(s):
-    if s.find("#") != -1:
-        s = s[:s.find("#")]
-    return s
+        
 
-def minitechSortingAlgorithm(rs, q):
-    
-    q = q.upper()
-    terms = split('\s|\#|\,', q)
-    scores_name = {}
-    scores_description = {}
-    object_depths = {}
-    object_ids = {}
-    
-    for r in rs:
-        
-        description = names[r].upper()
-        name = stripComment(description)
-        
-        tokens_name = split('\s|\#|\,', name)
-        matchCount_name = 0
-        
-        for term in terms:
-            for token in tokens_name:
-                if token == term:
-                    matchCount_name += 1
-                    
-        score_name = matchCount_name / len(tokens_name)
-        scores_name[r] = score_name
-        
-        tokens_description = split('\s|\#|\,', description)
-        matchCount_description = 0
-        
-        for term in terms:
-            for token in tokens_description:
-                if token == term:
-                    matchCount_description += 1
-                    
-        score_description = matchCount_description / len(tokens_description)
-        scores_description[r] = score_description
-    
-        depth = 9999
-        if r in depths.keys(): depth = depths[r]
-        object_depths[r] = depth
-        object_ids[r] = r
-    
-    rs2 = sorted(rs, key = lambda x: (-scores_name[x], -scores_description[x], object_depths[x], object_ids[x]))
-    return ListOfObjects(rs2)
-        
-    
-def searchAndSort(q):
-    rs = search(q)
-    rs = minitechSortingAlgorithm(rs, q)
-    return rs
-
-def getTransitions(a=None, b=None, c=None, d=None):
-    results = ListOfTransitions()
-    
-    if a is not None and b is not None:
-        key = (a, b, "")
-        if key in transitions.keys():
-            tran = transitions[key]
-            if c is not None and tran.c == c and d is not None and tran.d == d:
-                results.append(transitions[key])
-                return results
-    
-    for tran in transitions.values():
-        if (a is None or a == tran.a) and (b is None or b == tran.b) and (c is None or c == tran.c) and (d is None or d == tran.d):
-            results.append( tran )
-    
-    for tran in results.copy():
-        probSet_transitions = parseProbSet(tran)
-        for probSet_transition in probSet_transitions:
-            if (a is None or a == probSet_transition.a) and (b is None or b == probSet_transition.b) and (c is None or c == probSet_transition.c) and (d is None or d == probSet_transition.d):
-                results.append( probSet_transition )
-    return results
-
-gT = getTransitions
 
 def parseProbSet(tran):
     probSet_transitions = ListOfTransitions()
     if isProbSet(tran.c):
         for perhaps_newActor in categories[tran.c]:
             new_tran = tran.copy()
-            new_tran.raw = False
             new_tran.c = perhaps_newActor
+            new_tran.raw = tran.raw + sum([e1 != e2 for e1, e2 in zip(new_tran.toList()[:4], tran.toList()[:4])])
             probSet_transitions.append( new_tran )
     elif isProbSet(tran.d):
         for perhaps_newTarget in categories[tran.d]:
             new_tran = tran.copy()
-            new_tran.raw = False
             new_tran.d = perhaps_newTarget
+            new_tran.raw = tran.raw + sum([e1 != e2 for e1, e2 in zip(new_tran.toList()[:4], tran.toList()[:4])])
             probSet_transitions.append( new_tran )
     return probSet_transitions
 
 def make(id):
-    results = ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
+    # results = ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
+    
+    results = ListOfTransitions()
+    
+    for tran in transitions.values():
+        if id == tran.c or id == tran.d:
+            results.append( tran )
     
     probs = LO([e for e in getCategoriesOf(id) if isProbSet(e)])
     if len(probs) > 0:
         trans = ListOfTransitions()
         for prob in probs:
-            probSet_transitions = make(prob).raw()
+            probSet_transitions = make(prob)
             for probSet_transition in probSet_transitions:
                 ts = parseProbSet(probSet_transition)
                 for t in ts:
@@ -773,6 +699,37 @@ def use(id):
                 results.append( probSet_transition )
     return results
 
+def getTransitions(a=None, b=None, c=None, d=None):
+    results = ListOfTransitions()
+    
+    working = ListOfTransitions()
+    if c in objects.keys():
+        working = make(c)
+    elif d in objects.keys():
+        working = make(d)
+    elif a in objects.keys():
+        working = use(a)
+    elif b in objects.keys():
+        working = use(b)
+        
+    for t in working:
+        if (a is None or a == t.a) and (b is None or b == t.b) and (c is None or c == t.c) and (d is None or d == t.d):
+            results.append(t)
+            
+    if len(working) == 0:
+        for t in transitions.values():
+            if (a is None or a == t.a) and (b is None or b == t.b) and (c is None or c == t.c) and (d is None or d == t.d):
+                working.append(t)
+        for t0 in working:
+            results.append(t0)
+            ts = parseProbSet(t0)
+            for t in ts:
+                if (a is None or a == t.a) and (b is None or b == t.b) and (c is None or c == t.c) and (d is None or d == t.d):
+                    results.append(t)
+        results = ListOfTransitions(set(results))
+    
+    return results
+
         
 def getCategoriesOf(id):
     r = ListOfObjects()
@@ -788,7 +745,59 @@ def getObjectsBySprite(sprite_id):
         if str(sprite_id) in sprites: r.append(id)
     return r
 
-def checkObjectsForMissingSprites():
+def getSortedDepthList():
+    rs = []
+    
+    for id, o in O.items():
+        if O[id].uncraftable: continue
+        rs.append((depths[id], id, names[id]))
+    
+    rs.sort(key=lambda x: -x[0])
+    
+    return rs
+
+def keySearch(query):
+    o = O[30]
+    print(o.keySearch(query))
+
+
+
+def completelyDeleteObject(id):
+    import os
+    
+    cs = getCategoriesOf(id)
+    for cid in cs:
+        c = C[cid]
+        c.remove(id)
+        c.save()
+    
+    ts = use(id).raw()
+    for t in ts:
+        t.delete()
+        
+    ts = make(id).raw()
+    for t in ts:
+        t.delete()
+        
+    os.remove("../OneLifeData7/objects/" + str(id) + ".txt") 
+    
+
+    def find(pattern, path):
+        import fnmatch
+        result = []
+        for root, dirs, files in os.walk(path):
+            for name in files:
+                if fnmatch.fnmatch(name, pattern):
+                    result.append(os.path.join(root, name))
+        return result
+    
+    files = find( str(id) + '_*.txt', '../OneLifeData7/animations/')
+    for file in files:
+        os.remove(file)
+
+
+
+def checkForMissingSprites():
     sprites = list_dir("../OneLifeData7/sprites", file=True)
     sprites = [e.replace(".tga", "") for e in sprites if ".tga" in e]
     
@@ -801,17 +810,22 @@ def checkObjectsForMissingSprites():
                 
     return missing_sprites
 
-def getSortedDepthList():
-    rs = []
+def checkForMissingObjects():
+    os = LO(O.keys())
+    os.append(0)
+    os.append(-1)
+    os.append(-2)
     
-    for id, o in O.items():
-        if O[id].uncraftable: continue
-        rs.append((depths[id], id, names[id]))
+    for key, t in transitions.items():
+        if t.a not in os: print(t.a)
+        if t.b not in os: print(t.b)
+        if t.c not in os: print(t.c)
+        if t.d not in os: print(t.d)
     
-    rs.sort(key=lambda x: -x[0])
-    
-    return rs
-    
+    for id, c in C.items():
+        if id not in os: print(id)
+        for oid, o, in c.items():
+            if oid not in os: print(oid) 
 
 
 def init(options=[], verbose=False):
@@ -966,6 +980,9 @@ def init(options=[], verbose=False):
                 a, b, c, d, flag = tran.toList()[:5]
                 if (a, b, flag) not in transitions.keys():
                     transitions[a, b, flag] = tran
+                else:
+                    if tran.raw < transitions[(a, b, flag)].raw:
+                        transitions[a, b, flag] = tran
                     
         save_pickle_file('transitions.pickle', transitions)
         
@@ -979,7 +996,7 @@ def init(options=[], verbose=False):
         
         raw_transitions = {}
         for key, tran in transitions.items():
-            if tran.raw:
+            if tran.raw == 0:
                 raw_transitions[key] = tran
         
         if "regenerate_smart" in options:
@@ -1013,6 +1030,9 @@ def init(options=[], verbose=False):
                     a, b, c, d, flag = tran.toList()[:5]
                     if (a, b, flag) not in transitions.keys():
                         transitions[a, b, flag] = tran
+                    else:
+                        if tran.raw < transitions[(a, b, flag)].raw:
+                            transitions[a, b, flag] = tran
                     
     
     ############################################################# Generating Object Depth Map
