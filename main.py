@@ -17,4 +17,8 @@ from func import *
 
 
 
-## Do stuff here
+def getSpriteContent(spriteID):
+    path = "../OneLifeData7/sprites/{}.txt".format(spriteID)
+    t = read_txt(path)
+    return t
+
