@@ -1,9 +1,8 @@
-
 import numpy as np
 from PIL import Image
 
 import massEditor
-from massEditor import Pos, read_txt
+# from massEditor import read_txt
 
 
 white = (255,255,255,255)
@@ -17,6 +16,11 @@ green = (0,255,0,255)
 blue = (0,0,255,255)
 
 backgroundColor = grey
+
+def read_txt(path):
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        text = f.read()
+    return text
 
 def transparent_color(color):
     new_color = (color[0], color[1], color[2], 0)
@@ -104,9 +108,16 @@ def blend(mode, front, back):
 
 
 
-def draw(id):
+def draw(arg):
     
-    o = massEditor.objects[id]
+    if type(arg) == int:
+        arg = massEditor.objects[arg]    
+    if type(arg) == massEditor.Object or type(arg) == massEditor.Sprites:
+        arg = arg
+    else:
+        return
+    
+    o = arg
     
     dimension = (1024, 1024)
     img = Image.new("RGBA", dimension, transparent_color(backgroundColor))
@@ -115,13 +126,13 @@ def draw(id):
     if 'spritesAdditiveBlend' in o.keys():
         additiveBlend_sprites = [int(e) for e in o.spritesAdditiveBlend.split(',')]
     
-    for i, (sprite, pos, rot, hFlip, color) in enumerate(zip(o.getAsList("spriteID"), o.getAsList("pos"), o.getAsList("rot"), o.getAsList("hFlip"), o.getAsList("color"))):
+    for i, (sprite, pos, rot, hFlip, color) in enumerate(zip(o.spriteID, o.pos, o.rot, o.hFlip, o.color)):
         
         sprite_tga = Image.open(f"../output/sprites/{sprite}.tga")
         sprite_text = read_txt(f"../output/sprites/{sprite}.txt")
         sprite_text_parts = sprite_text.split()
         anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
-        pos = Pos(pos)
+        pos = [float(e) for e in pos.split(',')]
         
         if color != '1.000000,1.000000,1.000000':
             # arr = np.array(np.asarray(sprite_tga).astype('float'))
@@ -139,7 +150,7 @@ def draw(id):
         rotate_center = (sprite_w//2 + anchor_pos[0], sprite_h//2 + anchor_pos[1])
         sprite_tga = sprite_tga.rotate(-float(rot) * 360, center=rotate_center, expand=True)
         sprite_w, sprite_h = sprite_tga.size
-        offset = (dimension[0]//2 - sprite_w//2 + int(pos.x) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos.y) - anchor_pos[1])
+        offset = (dimension[0]//2 - sprite_w//2 + int(pos[0]) - anchor_pos[0], dimension[1]//2 - sprite_h//2 - int(pos[1]) - anchor_pos[1])
         
         
         

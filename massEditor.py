@@ -1,3 +1,4 @@
+from draw import draw
 
 categories = {}
 objects = {}
@@ -8,6 +9,7 @@ depths = {}
 
 O = {}
 C = {}
+Os = None
 
 ################################################################################
 ############################################################# Util #############
@@ -61,7 +63,9 @@ def load_pickle_file(filepath):
 import math
 from collections import OrderedDict
 
+list_tags = set()
 def objectFileLinesParser(content):
+    global list_tags
     odict = OrderedDict()
     lines = content.splitlines()
     lineNums = OrderedDict()
@@ -91,12 +95,46 @@ def objectFileLinesParser(content):
                     lineNums[tag] = [lineNums[tag]]
                 odict[tag].append(value)
                 lineNums[tag].append(lineNum)
+                list_tags.add(tag)
             else:
                 odict[tag] = value
                 lineNums[tag] = lineNum
     
     return odict, lineNums, lines
 
+def isFloat(value):
+    if value.count('.') == 1:
+        values = value.split('.')
+        if values[0].replace('-', '', 1).isdigit() and values[1].isdigit() and len(values[1]) == 6:
+            return True
+    return False
+            
+
+def furtherParse(value):
+    if type(value) == list:
+        return [furtherParse(e) for e in value]
+    if type(value) != str: return value
+    if value.count('#') > 1: return value
+    if '#' in value:
+        values = value.split('#')
+        return [furtherParse(values[0]), values[1]]
+    if value.count(',') > 1:
+        values = value.split(',')
+        return [furtherParse(e) for e in values]
+    if value.count(',') == 1:
+        values = value.split(',')
+        if isFloat(values[0]) and isFloat(values[1]):
+            return Pos(value)
+        return [furtherParse(values[0]), furtherParse(values[1])]
+    if ':' in value:
+        values = value.split(':')
+        return [furtherParse(values[0]), furtherParse(values[1])]
+    if isFloat(value):
+        return float(value)
+    if value.replace('-', '', 1).isdigit():
+        return int(value)
+    return value
+    
 
 
 class Pos(list):
@@ -111,6 +149,8 @@ class Pos(list):
             self[:] = args            
     def __repr__(self):
         return f"{self[0]:.6f},{self[1]:.6f}"
+    def dist(self):
+        return self.x * self.x + self.y * self.y
 
     @property
     def x( self ):
@@ -120,16 +160,61 @@ class Pos(list):
         return self[1]
 
 
+
+
 class Object(OrderedDict):
     
     def __getstate__(self): return self.__dict__
     def __setstate__(self, d): self.__dict__.update(d)
+    
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
     
     def __init__(self, content = ""):
         parsed = objectFileLinesParser(content)
         self.update(parsed[0])
         super(OrderedDict, self).__setattr__('lineNums', parsed[1])
         super(OrderedDict, self).__setattr__('lines', parsed[2])
+    
+    def __getattr__(self, key):
+        r = self[key]
+        if key in list_tags and type(r) is not list: r = [r]
+        return r
+    
+    def __setattr__(self, tag, value, index=None):
+        if tag not in self.keys():
+            raise KeyError('Tag {} not found in O[{}]. ({})'.format(tag, self.id, self.name))
+            return
+        lineNum = self.lineNums[tag]
+        if type(self[tag]) is list and index is not None:
+            oldValue = self[tag][index]
+            self[tag][index] = value
+            lineNum = lineNum[index]
+        elif type(self[tag]) is not list and index is None:
+            oldValue = self[tag]
+            self[tag] = value
+        else:
+            raise TypeError('O[{}].{} is not a list. ({})'.format(self.id, tag, self.name))
+            return
+        lhs = f"{tag}="
+        if tag == 'name': lhs = ""
+        self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
+    
+    def change(self, tag, index, value):
+        return self.__setattr__(tag, value, index)
+    
+    def __getitem__(self, arg):
+        if not isinstance(arg, int) and not isinstance(arg, slice):
+            return super(OrderedDict, self).__getitem__(arg)
+        if isinstance(arg, int):
+            arg = [arg]
+        if isinstance(arg, slice):
+            length = len(self.pos)
+            arg = list(range(length)[arg])
+        
+        if len(arg) == 0: return None
+        a, b = arg[0], arg[-1] + 1
+        return self._getSprites(a, b)
     
     def keySearch(self, query=""):
         query = query.lower()
@@ -138,42 +223,12 @@ class Object(OrderedDict):
         if query != "":
             ks = [e for e in ks if query in e.lower()]
         return ks
-    
-    def setExtra(self, key, value):
-        super(OrderedDict, self).__setattr__(key, value)
-    
-    def __getattr__(self, key):
-        if key in self.keys():
-            return self[key]
-        return None
-    
-    def __setattr__(self, tag, value, index=None):
-        if tag not in self.keys():
-            raise KeyError
-            return
-        lineNum = self.lineNums[tag]
-        if type(self[tag]) is list and index is not None:
-            oldValue = self[tag][index]
-            self[tag][index] = value
-            lineNum = lineNum[index]
-        elif type(self[tag]) is not list:
-            oldValue = self[tag]
-            self[tag] = value
-        else:
-            raise TypeError
-            return
-        lhs = f"{tag}="
-        if tag == 'name': lhs = ""
-        self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
-        return Object("\n".join(self.lines))
-    
-    def getAsList(self, key):
-        r = self[key]
-        if type(r) is not list: r = [r]
-        return r
         
+    def content(self):
+        return "\n".join(self.lines)
+    
     def copy(self):
-        return Object("\n".join(self.lines))
+        return Object(self.content())
     
     def linesByTag(self, tag):
         index = self.lineNums[tag]
@@ -183,29 +238,32 @@ class Object(OrderedDict):
             return self.lines[index]
     
     def save(self):
-        
-        content = "\n".join(self.lines)
-        
         id = self['id']
         path = Path("../output/objects") / f"{id}.txt"
-        save_txt(content, path)
+        save_txt(self.content(), path)
 #        Path(path/"cache.fcz").unlink(missing_ok=True)
         
-        objects[id] = Object("\n".join(self.lines))
+        objects[id] = self.copy()
         
         append_txt(f"{str(path)}\n", "changed_files.txt")
         
-        
+    def draw(self):
+        return draw(self)
     
-    def _getSpriteLines(self, index_start, index_end = None):
+    
+    def _getSprites(self, index_start, index_end = None):
         if index_end is None: index_end = index_start + 1
-        a = self.lineNums['spriteID'][index_start]
-        if index_end >= int(self['numSprites']):
+        spriteID = self.lineNums['spriteID']
+        if type(spriteID) is int: spriteID = [spriteID]
+        a = spriteID[index_start]
+        if index_end >= len(self.spriteID):
+            if 'headIndex' not in self.keys():
+                raise IndexError('GetSprites index out of range ({}, {}).'.format(index_start, index_end))
             b = self.lineNums['headIndex']
         else:
-            b = self.lineNums['spriteID'][index_end]
+            b = spriteID[index_end]
         
-        o_copy = self.copy()
+        o_copy = Sprites( '\n'.join(self.lines[a:b]) )
         if type(o_copy['parent']) is list:
             for i, v in enumerate(o_copy['parent']):
                 v2 = int(v)
@@ -214,42 +272,26 @@ class Object(OrderedDict):
                 else:
                     v2 = v2 - index_start
                 o_copy.__setattr__('parent', str(v2), i)
-        return o_copy.lines[a:b]
-    
-#        return self.lines[a:b]
-        
-#    def getSprites0(self, index_start, index_end = None):
-#        lines = self._getSpriteLines( index_start, index_end )
-#        temp_obj = Sprite( '\n'.join(lines) )
-#        indexes = temp_obj.lineNums['spriteID']
-#        indexes.append( len(temp_obj.lines) )
-#        r = []
-#        for i, v in enumerate(indexes[:-1]):
-#            s = Sprite( '\n'.join( lines[indexes[i]:indexes[i+1]] ) )
-#            r.append( s )
-#        return r
-    
-    def getSprites(self, index_start, index_end = None):
-        lines = self._getSpriteLines( index_start, index_end )
-        return Object( '\n'.join(lines) )
+        return o_copy
     
     def _insertSprites(self, index, new_content):
         # first to last
         # back to front
         # 0 to N
-        if type(new_content) is str: new_content = new_content.split("\n")
-        partial_object = Object( "\n".join(new_content) )
+        if type(new_content) is list: new_content = "\n".join(new_content)
+        if type(new_content) is Sprites: new_content = new_content.content()
+        partial_object = Sprites( new_content )
         
-        extra_numSprites = len(partial_object.getAsList('spriteID'))
+        extra_numSprites = len(partial_object.spriteID)
         old_numSprites = int(self.numSprites)
         self.numSprites = str( old_numSprites + extra_numSprites )
         
-        parents = self.getAsList('parent')
+        parents = self.parent
         if len(parents) > 1:
             for i, v in enumerate( [int(e) for e in parents] ):
                 if v >= index:
                     self.__setattr__("parent", str(v + extra_numSprites), i)
-        parents = partial_object.getAsList('parent')
+        parents = partial_object.parent
         if len(parents) > 1:
             for i, v in enumerate( [int(e) for e in parents] ):
                 if v == -1: continue
@@ -260,7 +302,7 @@ class Object(OrderedDict):
         else:
             insertAt_lineNum = self.lineNums['spriteID'][index]
         lines = self.lines
-        lines[insertAt_lineNum:insertAt_lineNum] = new_content
+        lines[insertAt_lineNum:insertAt_lineNum] = partial_object.lines
         
         content = "\n".join(lines)
         new_object = Object(content)
@@ -275,7 +317,7 @@ class Object(OrderedDict):
             removeTo_lineNum = self.lineNums['headIndex']
         else:
             removeTo_lineNum = self.lineNums['spriteID'][index+1]
-            
+        
         lines = self.lines
         lines[removeFrom_lineNum:removeTo_lineNum] = []
         
@@ -287,18 +329,146 @@ class Object(OrderedDict):
         
         self.numSprites = str(int(self.numSprites) - 1)
         
-        parents = self.getAsList('parent')
+        parents = self.parent
         for i, v in enumerate( [int(e) for e in parents] ):
             if v == index:
                 self.__setattr__("parent", "-1", i)
+            elif v > index:
+                self.__setattr__("parent", str(v-1), i)
+                
+                
+key_following = {}
+def setObjectExtraProperty(o, newKey, newValue):
+    global key_following
+    if len(key_following) == 0:
+        for id, o in objects.items():
+            
+            linesFirstTag_dict = {}
+            linesFirstTag = []
+            for i, (key, lineNum) in enumerate(o.lineNums.items()):
+                if type(lineNum) is not list:
+                    lineNum = [lineNum]
+                
+                for n in lineNum:
+                    if n not in linesFirstTag_dict.keys():
+                        linesFirstTag_dict[n] = key
+                
+            for i2 in range(len(linesFirstTag_dict)):
+                linesFirstTag.append( linesFirstTag_dict[i2] )
+            
+            for i, (key, lineNum) in enumerate(o.lineNums.items()):
+                
+                if i == 0:
+                    key_following[key] = None
+                    continue
+                
+                if type(lineNum) is list:
+                    lineNum = lineNum[0]
+                
+                key_following[key] = linesFirstTag[lineNum - 1]
+    
+    key0 = key_following[newKey]
+    lineNum0 = o.lineNums[key0]
+    lines = o.lines
+    lines[lineNum0+1:lineNum0+1] = ["{}={}".format(newKey, newValue)]
+    
+    return Object("\n".join(lines))
 
 
+sprite_contents = {}
+def getSpriteContent(spriteID):
+    global sprite_contents
+    if spriteID not in sprite_contents.keys():
+        path = "../output/sprites/{}.txt".format(spriteID)
+        t = read_txt(path)
+        sprite_contents[spriteID] = t
+    return sprite_contents[spriteID]
 
-
-class Sprite(OrderedDict):
-    def __init__(self, content = ""):
-        odict, self.lineNums, self.lines = objectFileLinesParser(content)
-        self.update(odict)
+class Sprites(Object):
+    
+    def __init__(self, content):
+        parsed = objectFileLinesParser(content)
+        self.update(parsed[0])
+        super(OrderedDict, self).__setattr__('lineNums', parsed[1])
+        super(OrderedDict, self).__setattr__('lines', parsed[2])
+        
+    def __len__(self):
+        return len(self.spriteID)
+    
+    def __repr__(self):
+        pos = self.pos
+        spriteID = self.spriteID
+        parent = self.parent
+        ss = ""
+        for i in range(len(self)):
+            p = Pos(pos[i])
+            ss += f"{i:2} {parent[i]:2} {p.x:>10.6f},{p.y:>10.6f} {spriteID[i]:6} {getSpriteContent(spriteID[i])}\n"
+        return ss
+    
+    def __contains__(self, other, verbose=False):
+        if not isinstance(other, Sprites):
+            raise TypeError('Sub-sprites condition involves {}.'.format(type(other).__name__))
+        
+        if len(other) > len(self): return False
+        
+        if len(other) == 1:
+            if other["spriteID"] in self.spriteID:
+                indexes = self.index(other["spriteID"])
+                for index in indexes:
+                    if other["color"] == self.color[index]:
+                        return True
+                    else:
+                        if verbose: print( "Single sprite {} color mismatch {} vs {}.".format(other["spriteID"], other["color"], self.color[index]) )
+            return False
+        
+        zeroSprite = other.spriteID[0]
+        indexes = self.index(zeroSprite)
+        if len(indexes) == 0:
+            return False
+        elif len(indexes) == 1:
+            index1 = indexes[0]
+        else:
+            pos0 = other.pos[0]
+            minDist = 9999999
+            for i1, pos1 in enumerate(self.pos):
+                d = (Pos(pos0) - Pos(pos1)).dist()
+                if d < minDist:
+                    minDist = d
+                    index1 = i1
+        
+        for i0, sprite0 in enumerate(other.gspriteID):
+            if sprite0 not in self.spriteID: return False
+            
+            found = False
+            
+            for i1, sprite1 in enumerate(self.spriteID):
+                
+                if verbose:
+                    if sprite0 == sprite1:
+                        a, b = other.delta(i0, 0), self.delta(i1, index1)
+                        if a != b: print( "Sprite {} at index {}, delta mismatch {} vs {}.".format(sprite0, i1, a, b) )
+                        a, b = other.rot[i0], self.rot[i1]
+                        if a != b: print( "Sprite {} at index {}, rot mismatch {} vs {}.".format(sprite0, i1, a, b) )
+                        a, b = other.hFlip[i0], self.hFlip[i1]
+                        if a != b: print( "Sprite {} at index {}, hFlip mismatch {} vs {}.".format(sprite0, i1, a, b) )
+                
+                if sprite0 == sprite1 and \
+                   other.delta(i0, 0) == self.delta(i1, index1) and \
+                   other.rot[i0] == self.rot[i1] and \
+                   other.hFlip[i0] == self.hFlip[i1]:
+                    found = True
+                if found: break
+            if not found: return False
+        return True
+    
+    def delta(self, i0, i1):
+        p0 = Pos(self.pos[i0])
+        p1 = Pos(self.pos[i1])
+        return p1 - p0
+    
+    def index(self, id):
+        return [i for i, v in enumerate(self.spriteID) if v == str(id)]
+        
 
 
 class Transition():
@@ -338,22 +508,17 @@ class Transition():
         line_length = 32
         max_lines = math.ceil(max([len(e) for e in (a_name, b_name, c_name, d_name)]) / line_length)
         
-        a_name += ( " " * (max_lines * line_length - len(a_name)) )
-        b_name += ( " " * (max_lines * line_length - len(b_name)) )
-        c_name += ( " " * (max_lines * line_length - len(c_name)) )
-        d_name += ( " " * (max_lines * line_length - len(d_name)) )
-        
         ss = []
         for i in range(max_lines):
             
             s = ""
             s += f"{str((self.a, self.b, self.c, self.d, self.flag)):<40}" if i == 0 else " " * 40
             s += f"{a_name[i*line_length:(i+1)*line_length]:<{line_length}}"
-            s += " + " if i == 0 else "   "
+            s += "  +  " if i == 0 else "     "
             s += f"{b_name[i*line_length:(i+1)*line_length]:<{line_length}}"
-            s += " = " if i == 0 else "   "
+            s += "  =  " if i == 0 else "     "
             s += f"{c_name[i*line_length:(i+1)*line_length]:<{line_length}}"
-            s += " + " if i == 0 else "   "
+            s += "  +  " if i == 0 else "     "
             s += f"{d_name[i*line_length:(i+1)*line_length]:<{line_length}}"
             
             ss.append(s)
@@ -423,7 +588,11 @@ class ListOfTransitions(list):
         return ListOfTransitions(list(self) + list(other))
     
     def pprint(self):
-        for t in self: t.pprint()
+        if len(self) == 0: return
+        print("-" * (32*4 + 5*3 + 40))
+        for t in self: 
+            t.pprint()
+            print("-" * (32*4 + 5*3 + 40))
         
     def search(self, querystr):
         query_list = querystr.split()
@@ -480,6 +649,9 @@ class ListOfObjects(list):
         return search(querystr, self)
     def items(self):
         return [ (i, objects[i]) for i in self ]
+    
+    def filter(self, func):
+        return LO([e for e in self if func(objects[e])])
 
 LO = ListOfObjects
 
@@ -517,7 +689,7 @@ class Category(ListOfObjects):
     
     @property
     def name(self):
-        return names[self.parentID]
+        return objects[self.parentID].name
 
 
 def isCategory(id):
@@ -663,8 +835,6 @@ def parseProbSet(tran):
     return probSet_transitions
 
 def make(id):
-    # results = ListOfTransitions(set(getTransitions(c=id) + getTransitions(d=id)))
-    
     results = ListOfTransitions()
     
     for tran in transitions.values():
@@ -741,24 +911,33 @@ def getCategoriesOf(id):
 def getObjectsBySprite(sprite_id):
     r = ListOfObjects()
     for id, o in objects.items():
-        sprites = o.getAsList("spriteID")
+        sprites = o.spriteID
         if str(sprite_id) in sprites: r.append(id)
     return r
 
 def getSortedDepthList():
     rs = []
     
-    for id, o in O.items():
-        if O[id].uncraftable: continue
+    for id, o in objects.items():
+        if id not in depths.keys(): continue
         rs.append((depths[id], id, names[id]))
     
     rs.sort(key=lambda x: -x[0])
     
     return rs
 
-def keySearch(query):
-    o = O[30]
-    print(o.keySearch(query))
+
+allKeys = []
+def key(query):
+    global allKeys
+    
+    if len(allKeys) == 0:
+        for id, o in objects.items():
+            for key in o.keys():
+                if key not in allKeys:
+                    allKeys.append(key)
+    
+    print([e for e in allKeys if query.lower() in e.lower()])
 
 
 
@@ -803,15 +982,15 @@ def checkForMissingSprites():
     
     missing_sprites = []
     
-    for id, o in O.items():
-        for s in o.getAsList('spriteID'):
+    for id, o in objects.items():
+        for s in o.spriteID:
             if s not in sprites:
                 missing_sprites.append(s)
                 
     return missing_sprites
 
 def checkForMissingObjects():
-    os = LO(O.keys())
+    os = LO(objects.keys())
     os.append(0)
     os.append(-1)
     os.append(-2)
@@ -842,6 +1021,7 @@ def init(options=[], verbose=False):
     global depths
     
     global O
+    global Os
     global C
     
     changed_files = []
@@ -915,7 +1095,6 @@ def init(options=[], verbose=False):
     
             o = Object(t)
             id = int(o.id)
-            names[id] = o.name
             objects[id] = o
     
             if verbose and i % 500 == 0: print( "Objects:", f"{i} / {len(files)}" )
@@ -943,13 +1122,13 @@ def init(options=[], verbose=False):
                     t = read_txt(file)
                     o = Object(t)
                     id = int(o.id)
-                    names[id] = o.name
                     objects[id] = o
     
     for id, o in objects.items():
         names[id] = o.name
         
     O = objects
+    Os = LO(list(objects.keys()))
     
     ############################################################# Transitions
     
@@ -1071,12 +1250,7 @@ def init(options=[], verbose=False):
     
     else:
         depths = load_pickle_file('depths.pickle')
-        
     
-    uncraftables = ListOfObjects(objects.keys() - depths.keys())
-    
-    for oid, o in objects.items():    
-        o.setExtra('uncraftable', oid in uncraftables)
 
     print( "\nDONE LOADING\n" )
 

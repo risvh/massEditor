@@ -101,12 +101,7 @@ def minitechSortingAlgorithm(q):
 
 ############################################################# print food by depthes and foodValue
 
-# foods = LO()
-
-# for id, o in O.items():
-#     if o.foodValue != '0':
-#         foods.append(id)
-
+# foods = Os.filter(lambda o: o.foodValue != '0')
 
 # def getTotalFoodValue(id):
 #     if ',' not in O[id].foodValue: return int(O[id].foodValue)
@@ -114,8 +109,18 @@ def minitechSortingAlgorithm(q):
 
 # foods.sort(key=lambda x: (depths[x] if x in depths.keys() else 9999, getTotalFoodValue(x)))
 
-# for id, o in foods.items():        
-#     print(depths[id] if id in depths.keys() else 9999, o.foodValue, id, names[id], sep='\t\t')
+# import pandas as pd
+
+# df = pd.DataFrame(columns = ['depth', 'foodValue', 'id', 'name'])
+
+# for id, o in foods.items():
+#     i = len(df)
+#     df.loc[i, 'depth'] = depths[id] if id in depths.keys() else 9999
+#     df.loc[i, 'foodValue'] = o.foodValue
+#     df.loc[i, 'id'] = id
+#     df.loc[i, 'name'] = names[id]
+    
+# print(df.to_string())
 
 
 
@@ -153,7 +158,7 @@ def minitechSortingAlgorithm(q):
 # arr = []
 
 # for id, o in O.items():
-#     if o.uncraftable: continue
+#     if int(o.id) not in depths.keys() : continue
 #     if not overallContainable(id): continue
 #     n = int(o.numSprites)
 #     arr.append((n, id, names[id]))
