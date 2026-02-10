@@ -650,8 +650,13 @@ class ListOfObjects(list):
     def items(self):
         return [ (i, objects[i]) for i in self ]
     
+    def __getitem__(self, *args):
+        r = list(self).__getitem__(*args)
+        if type(r) is int: r = [r]
+        return ListOfObjects(r)
+    
     def filter(self, func):
-        return LO([e for e in self if func(objects[e])])
+        return ListOfObjects([e for e in self if func(objects[e])])
 
 LO = ListOfObjects
 
