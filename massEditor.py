@@ -63,7 +63,7 @@ def load_pickle_file(filepath):
 import math
 from collections import OrderedDict
 
-list_tags = set()
+list_tags = []
 def objectFileLinesParser(content):
     global list_tags
     odict = OrderedDict()
@@ -95,7 +95,7 @@ def objectFileLinesParser(content):
                     lineNums[tag] = [lineNums[tag]]
                 odict[tag].append(value)
                 lineNums[tag].append(lineNum)
-                list_tags.add(tag)
+                if tag not in list_tags: list_tags.append(tag)
             else:
                 odict[tag] = value
                 lineNums[tag] = lineNum
@@ -913,6 +913,14 @@ def getObjectsBySprite(sprite_id):
     for id, o in objects.items():
         sprites = o.spriteID
         if str(sprite_id) in sprites: r.append(id)
+    return r
+
+def getObjectsBySound(sound_id):
+    r = ListOfObjects()
+    for id, o in objects.items():
+        sounds = furtherParse(o.sounds)
+        for s in sounds:
+            if sound_id == s[0]: r.append(id)
     return r
 
 def getSortedDepthList():

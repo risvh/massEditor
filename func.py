@@ -98,6 +98,20 @@ def minitechSortingAlgorithm(q):
     return ListOfObjects(rs2)
 
 
+def getAncestor(id):
+    r = LO()
+    if id not in depths.keys(): return r
+    do = depths[id]
+    ts = make(id)
+    for t in ts:
+        aa, ab = False, False
+        da, db = 9999, 9999
+        if t.a in depths.keys(): da = depths[t.a]
+        if t.b in depths.keys(): db = depths[t.b]
+        if do - da == 1 and t.a not in r: r.append(t.a)
+        if do - db == 1 and t.b not in r: r.append(t.b)
+    return r
+
 
 ############################################################# print food by depthes and foodValue
 
