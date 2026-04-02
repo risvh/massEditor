@@ -223,6 +223,8 @@ class Object(OrderedDict):
         if query != "":
             ks = [e for e in ks if query in e.lower()]
         return ks
+    
+    k = keySearch
         
     def content(self):
         return "\n".join(self.lines)
