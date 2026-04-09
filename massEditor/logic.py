@@ -133,31 +133,19 @@ def getTransitions(a=None, b=None, c=None, d=None):
     return results
 
 
-
-
 def getObjectsBySprite(sprite_id):
     r = ListOfObjects()
     for id, o in _store.state.objects.items():
-        sprites = o.spriteID
-        if str(sprite_id) in sprites: r.append(id)
+        if sprite_id in o.spriteID: r.append(id)
     return r
 
 def getObjectsBySound(sound_id):
     r = ListOfObjects()
     for id, o in _store.state.objects.items():
-        sounds = furtherParse(o.sounds)
-        for s in sounds:
-            if sound_id == s[0]: r.append(id)
+        if sound_id in o.sounds.ids: r.append(id)
     return r
 
 
-
-def getNumUses(o):
-    return int(o.numUses.split(',')[0])
-
-def getUseChance(o):
-    if ',' not in o.numUses: return 1.0
-    return float(o.numUses.split(',')[1])
 
 def getAncestors(id):
     r = ListOfObjects()
@@ -175,7 +163,7 @@ def getAncestors(id):
 
 
 def sortObjectsByDepth(lo):
-    lo.sort(key=lambda x: 9999 if int(x) not in _store.state.depths.keys() else -_store.state.depths[int(x)])
+    lo.sort(key=lambda o: 9999 if o.id not in _store.state.depths.keys() else -_store.state.depths[o.id])
     return lo
 
 def printObjectsWithDepth(lo):
@@ -218,7 +206,7 @@ def completelyDeleteObject(id):
 
 def checkForMissingSprites():
     sprites = list_dir(OUTPUT_PATH / "sprites", file=True)
-    sprites = [e.replace(".tga", "") for e in sprites if ".tga" in e]
+    sprites = [int(e.replace(".tga", "")) for e in sprites if ".tga" in e]
     
     missing_sprites = []
     

@@ -4,7 +4,8 @@ from pathlib import Path
 from .config import OUTPUT_PATH
 
 from .util import read_txt, list_dir, load_pickle_file, save_pickle_file, save_txt
-from .models import Object, Category, Transition, lookForListTags
+from .models import Object, Category, Transition, Pos, furtherParse, TrackedList, TrackedIndexList
+from .propertyModels import special_types
 from .logic import isCategory, isPattern, use
 
 from . import store as _store
@@ -167,6 +168,9 @@ def init(options=[], verbose=False):
     
     if "regenerate_objects" not in options and Path("objects.pickle").exists():
         _store.state.objects = load_pickle_file('objects.pickle')
+        object_meta = load_pickle_file('objectMeta.pickle')
+        _store.state.sprite_tags = object_meta['sprite_tags']
+        _store.state.object_property_dataTypes = object_meta['object_property_dataTypes']
         
         if "regenerate_smart" in options:
             for file in changed_files:
@@ -196,10 +200,99 @@ def init(options=[], verbose=False):
             _store.state.objects[id] = o
     
             if verbose:
-                s = f"Objects: {i} / {len(files)}"
+                s = f"Objects 1: {i} / {len(files)}"
                 updateProgress(s, i == 0)
+                
+        
+        for id, o in _store.state.objects.items():
+            for key in o.keys():
+                if type(o._lineNums[key]) is list:
+                    _store.state.sprite_tags.add(key)
+        for i, (id, o) in enumerate(_store.state.objects.items()):
+            for tag in _store.state.sprite_tags:
+                if tag in o.keys() and type(o._lineNums[tag]) is not list:
+                    _store.state.objects[id] = _store.state.objects[id].copy()
+                    break
+            if verbose:
+                s = f"Objects 2: {i} / {len(files)}"
+                updateProgress(s, i == 0)
+                
+                
+        all_property_types = {}
+        all_property_types_examples = {}
+        for id, o in _store.state.objects.items():
+            for key in o.keys():
+                value = furtherParse( o.__getattribute__(key) )
+                if key not in all_property_types.keys():
+                    all_property_types[key] = [type(value)]
+                    all_property_types_examples[key] = [o]
+                elif type(value) not in all_property_types[key]:
+                    all_property_types[key].append(type(value))
+                    all_property_types_examples[key].append(o)
+                    
+        object_property_dataTypes = {}
+        for k, v in all_property_types.items():
+            
+            if k == 'name':
+                object_property_dataTypes[k] = str
+            elif k in special_types.keys():
+                # Classes defined in propertyModel
+                object_property_dataTypes[k] = special_types[k]
+            elif len(v) == 1 and v[0] in [int, float, Pos]:
+                # Parsed
+                object_property_dataTypes[k] = v[0]
+            elif len(v) == 1 and v[0] == list and type(all_property_types_examples[k][0]._lineNums[k]) is list:
+                # Sprite tags
+                object_property_dataTypes[k] = TrackedList
+                
+                ## TODO: correct containOffset to be float pair
+    
+            elif len(v) > 1 and int in v and float in v:
+                object_property_dataTypes[k] = float
+            elif len(v) > 1 and int in v and list in v:
+                list_value_types = set()
+                index_exceptions = []
+                
+                for id, o in _store.state.objects.items():
+                    if k not in o.keys(): continue
+                    wrong_index = False
+                    v2 = o.__getattribute__(k)
+                    v2 = furtherParse(v2)
+                    ns = len(o._lineNums['spriteID'])
+                    if type(v2) == int:
+                        if v2 >= ns: wrong_index = True
+                    elif type(v2) == list:
+                        for e in v2:
+                            list_value_types.add(type(e))
+                            if e >= ns: wrong_index = True
+                            
+                    if wrong_index: index_exceptions.append(id)
+                
+                if len(index_exceptions) == 0 and len(list_value_types) == 1 and int in list_value_types:
+                    object_property_dataTypes[k] = TrackedIndexList
+                else:
+                    object_property_dataTypes[k] = str
+            else:
+                object_property_dataTypes[k] = str
+                
+        _store.state.object_property_dataTypes = object_property_dataTypes
+                
+        for i, (id, o) in enumerate(_store.state.objects.items()):
+            for tag, dataType in _store.state.object_property_dataTypes.items():
+                if tag in o.keys() and type(o.__getattribute__(key)) != dataType:
+                    _store.state.objects[id] = _store.state.objects[id].copy()
+                    break
+            if verbose:
+                s = f"Objects 3: {i} / {len(files)}"
+                updateProgress(s, i == 0)
+        
         print("\r" + s)
         
+        object_meta = {}
+        object_meta['sprite_tags'] = _store.state.sprite_tags
+        object_meta['object_property_dataTypes'] = _store.state.object_property_dataTypes
+        
+        save_pickle_file('objectMeta.pickle', object_meta)
         save_pickle_file('objects.pickle', _store.state.objects)
         
         for file in changed_files:
@@ -209,7 +302,6 @@ def init(options=[], verbose=False):
     
     for id, o in _store.state.objects.items():
         _store.state.names[id] = o.name
-    lookForListTags()
     
     ############################################################# Transitions
     
@@ -296,11 +388,11 @@ def init(options=[], verbose=False):
     
     ############################################################# Generating Object Depth Map
     
-    natural_objects = [key for key, value in _store.state.objects.items() if _store.state.objects[key]['mapChance'].split('#')[0] != '0.000000']
-    
     if "regenerate_depths" not in options and Path("depths.pickle").exists():
         _store.state.depths = load_pickle_file('depths.pickle')
     else:
+        natural_objects = [key for key, value in _store.state.objects.items() if _store.state.objects[key].mapChance.chance != 0.0]
+        
         horizon = list(natural_objects)
     
         for id in natural_objects:

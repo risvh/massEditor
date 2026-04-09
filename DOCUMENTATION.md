@@ -50,11 +50,10 @@ Represents a game object with its properties. An `OrderedDict` with property nam
 **Constructor:**
 - `Object(content="")` – Parse from raw text file
 
-**Key Methods:**
-- `__getattr__(key)` – Access property by name; returns list if property has multiple values, e.g. `obj.permanent`. For looking up the property names, see both `Object.key()` and `key()`
+**Methods:**
+- `__getattr__(key)` – Access property by name, e.g. `obj.permanent`. For looking up the property names, see both `Object.key()` and `key()`. Note that the property values are parsed as `int`, `float` or special data types that allows better manipulation, e.g. `obj.sounds` has the type `Sounds`
 - `__setattr__(tag, value, index=None)` – Modify property; updates internal line representation, e.g. `obj.permanent = '0'`
-- `change(tag, index, value)` – Modify a specific list item
-- `__getitem__(int|slice)` – Retrieve `Sprites` by index range, e.g. `obj[:]` returns the whole list of sprites of the object
+- `__getitem__(int|slice)` – Retrieve `Sprites` by index or index range, e.g. `obj[:]` returns the whole list of sprites of the object, `obj[0]` returns a list containing the first sprite (furthest in the back).
 - `key(query="")` – List all property keys matching query; empty query lists all keys. Only listing the properties that this object has
 - `content()` – Return `Object` to raw text string
 - `copy()` – Create deep copy
@@ -66,8 +65,9 @@ Represents a game object with its properties. An `OrderedDict` with property nam
 - `_removeSprite(index)` – Remove sprite at position (Experimental)
 
 **Attributes:**
-- `lineNums` – Dict mapping property names to line numbers
-- `lines` – List of raw text lines
+- `_raw_dict` - Dict where the keys are the object's properties, and values are the raw string values of the properties, or list of strings in the case where the property can appear multiple times in an object file, e.g. `spriteID`
+- `_lineNums` – Dict mapping property names to line numbers
+- `_lines` – List of raw text lines
 
 ---
 
@@ -162,6 +162,33 @@ Print all possible property keys from all objects, optionally filtered by query 
 
 ---
 
+### Class `TrackedList`
+
+A list that represents an `Object`'s sprite-related properties, e.g. `spriteID`. These sprite properties can appear multiple times in an object file, hence one `TrackedList` can represent several lines in a file. When this list is changed, the `Object` it is attached to changes accordingly, via `tag` and `callback`. `TrackedList` does not support `append()` or `pop()`.
+
+**Constructor:**
+- `TrackedList(items, tag, callback)` – `items` is the iterable. `tag` is the `Object` property this list is representing. `callback` is the `Object`'s `__setattr__()`
+
+**Methods:**
+- `__setitem__(index, value)` – Change element, e.g. `obj.spriteID[0] = 100`
+
+---
+
+### Class `TrackedIndexList`
+
+A list that represents a property of an `Object` which is supposed to be a list of sprite indexes, e.g. `useAppearIndex`. When this list is changed, the `Object` it is attached to changes accordingly, via `tag` and `callback`.
+
+**Constructor:**
+- `TrackedIndexList(content, tag, callback)` – `content` is the raw object file line. `tag` is the `Object` property this list is representing. `callback` is the `Object`'s `__setattr__()`
+
+**Methods:**
+- `__repr__()` - Return the comma-joined list
+- `__setitem__(index, value)` – Change element, e.g. `obj.useAppearIndex[0] = 2`
+- `append(value)` - Add to the end of the list, e.g. `obj.useAppearIndex.append(2)`
+- `pop(index=-1)` - Remove an element by index, e.g. `removed_element = obj.useAppearIndex.pop(0)`
+
+---
+
 ### `setObjectExtraProperty(obj, newKey, newValue)`
 
 (Experimental) Add a new property to an object. The function will try to add this property following the same ordering of properties in other objects.
@@ -188,7 +215,7 @@ Print all possible property keys from all objects, optionally filtered by query 
 
 ### `furtherParse(value)`
 
-(Experimental) Parse string values into native Python types and custom objects.
+(Experimental) Parse string values into native Python types and custom types.
 
 **Parameters:**
 - `value` (str | list | any) – Value to parse. If list, recursively parses each element.
@@ -283,20 +310,6 @@ Finds all objects using a specific sound.
 
 ---
 
-### `getNumUses(o)`
-Extracts number of uses from object's `numUses` field.
-- **Parameters**: `o` - Object with `numUses` field (format: `"{uses},{useChance}"`)
-- **Returns**: `int` - Number of uses
-
----
-
-### `getUseChance(o)`
-Extracts use chance from object's `numUses` field.
-- **Parameters**: `o` - Object with `numUses` field (format: `"{uses},{useChance}"`)
-- **Returns**: `float` - Probability value (default 1.0)
-
----
-
 ### `getAncestors(id)`
 Retrieves immediate ancestor objects of an object, i.e. objects with one depth level above
 - **Parameters**: `id` - Object id
@@ -337,3 +350,141 @@ Identifies sprite ids referenced but not found in sprites directory.
 Identifies object ids referenced in `transitions` but not found in `objects`.
 - **Parameters**: None
 - **Returns**: `list` - Missing object ids
+
+---
+
+### Class `MapChance`
+
+Represents the `mapChance` property of an `Object`.
+
+**Constructor:**
+- `MapChance(content, callback)` – `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `chance` or `biomes`, e.g. `obj.mapChance.chance = 0.5`
+
+**Attributes:**
+- `chance` - `float`, the map chance value
+- `biomes` – `tuple` of `int` that represent the biomes
+
+**String representation:** `"1.000000#biomes_0,3,4,5"`
+
+---
+
+### Class `Sounds`
+
+Represents a `sounds` property of an `Object`.
+
+**Constructor:**
+- `Sounds(content, callback)` - `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Access the `Sound` of this property, e.g. `obj.sounds.creation.volume = 0.5`
+- `ids()` - Return a `set` containing the sound IDs used in this property
+
+**Attributes:**
+- `creation`, `using`, `eating` or `decay` - Sound types, see [this wiki page](https://twohoursonelife.fandom.com/wiki/Object_Page#Sound_Related)
+
+**String representation:** `"369:0.500000,74:0.250000#496:0.250000,-1:1.000000,-1:1.000000"`
+
+---
+
+### Class `Sound`
+
+Represents a sound under the class `Sounds`.
+
+**Constructor:**
+- `Sound(soundTag, sound, volume, callback, index=None)` - See Attributes below
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `sound` or `volume` of this property, e.g. `obj.sounds.creation.volume = 0.5`. The other attributes cannot be changed
+
+**Attributes:**
+- `soundTag` - The sound type, either `creation`, `using`, `eating` or `decay`
+- `sound` - The sound ID
+- `volume` - A `float` representing the volume
+- `callback` - To change the parent `Sounds`
+- `index=None` - The index of this sound in case this is a subsound 
+
+**String representation:** `"369:0.500000"`
+
+---
+
+### Class `NumSlots`
+
+Represents a `numSlots` property of an `Object`.
+
+**Constructor:**
+- `NumSlots(content, callback)` - `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `num` or `timeStretch` of this property, e.g. `obj.numSlots.num = 3`. The other attributes cannot be changed
+
+**Attributes:**
+- `num` - An `int` of the number of slots
+- `timeStretch` - A `float`, usually just `1.000000` as this mechanics is not used in the game
+
+**String representation:** `"3#timeStretch=1.000000"`
+
+---
+
+### Class `TapoutTrigger`
+
+Represents a `tapoutTrigger` property of an `Object`.
+
+**Constructor:**
+- `TapoutTrigger(content, callback)` - `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `parameters` of this property, e.g. `obj.tapoutTrigger.parameters = (0,3,3,1)`
+- `pprint()` - Print out the values of this property, with details of what the `tapoutTrigger` parameters represent
+
+**Attributes:**
+- `toggle` - Should always be 1. To toggle off, this property should be removed from the object file
+- `parameters` - `tuple`, the first value is the tapout mode, see the `+tapoutTrigger` tag in [this wiki page](https://twohoursonelife.fandom.com/wiki/Objects_(Mechanics)#Tags) for more information
+
+**String representation:** `"1#0,3,3,1"`
+
+---
+
+### Class `FoodValue`
+
+Represents a `foodValue` property of an `Object`.
+
+**Constructor:**
+- `FoodValue(content, callback)` - `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `base` or `bonus` of this property, e.g. `obj.foodValue.bonus = 4`
+- `total()` - Return the sum of `base` and `bonus` values
+
+**Attributes:**
+- `base` - `int`, base food value
+- `bonus` - `int`, bonus food value
+
+**String representation:** `"1,16"`
+
+---
+
+### Class `NumUses`
+
+Represents a `numUses` property of an `Object`.
+
+**Constructor:**
+- `NumUses(content, callback)` - `content` is the raw string of the property value. `callback` is the `__setattr__` of the `Object` which this property is attached to
+
+**Methods:**
+- `__repr__()` – Return the formatted string of this property
+- `__setattr__(tag, value)` – Change the `num` or `chance` of this property, e.g. `obj.numUses.chance = 0.5`
+
+**Attributes:**
+- `num` - `int`, number of uses
+- `chance` - `float`, use chance
+
+**String representation:** `"6,1.000000"`

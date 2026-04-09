@@ -117,7 +117,7 @@ def draw(arg):
     
     additiveBlend_sprites = []
     if 'spritesAdditiveBlend' in o.keys():
-        additiveBlend_sprites = [int(e) for e in o.spritesAdditiveBlend.split(',')]
+        additiveBlend_sprites = o.spritesAdditiveBlend
     
     for i, (sprite, pos, rot, hFlip, color) in enumerate(zip(o.spriteID, o.pos, o.rot, o.hFlip, o.color)):
         
@@ -125,13 +125,13 @@ def draw(arg):
         sprite_text = read_txt(OUTPUT_PATH / f"sprites/{sprite}.txt")
         sprite_text_parts = sprite_text.split()
         anchor_pos = (int(sprite_text_parts[-2]), int(sprite_text_parts[-1]))
-        pos = [float(e) for e in pos.split(',')]
+        # pos = [float(e) for e in pos.split(',')]
         
-        if color != '1.000000,1.000000,1.000000':
+        if color != [1.0, 1.0, 1.0]:
             # arr = np.array(np.asarray(sprite_tga).astype('float'))
             arr = np.array(sprite_tga)
             r, g, b, a = np.rollaxis(arr, axis=-1)
-            r1, g1, b1 = [float(e) for e in color.split(",")]
+            r1, g1, b1 = color
             r = r * r1
             g = g * g1
             b = b * b1

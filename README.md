@@ -1,6 +1,6 @@
 # Mass Editor
 
-A Python-based programmatic interface for [Two Hours One Life](https://github.com/twohoursonelife/OneLifeData7) and [One Hour One Life](https://github.com/jasonrohrer/OneLifeData7/) game content. Allows filtering and sorting [objects](https://twohoursonelife.fandom.com/wiki/Objects_(Mechanics)), [transitions](https://twohoursonelife.fandom.com/wiki/Transitions_(Mechanics)), [categories](https://twohoursonelife.fandom.com/wiki/Categories_(Mechanics)), and making rule-based changes to them in batch and thoroughly.
+A Python programmatic interface for [Two Hours One Life](https://github.com/twohoursonelife/OneLifeData7) and [One Hour One Life](https://github.com/jasonrohrer/OneLifeData7/) game content. It allows filtering and sorting of [objects](https://twohoursonelife.fandom.com/wiki/Objects_(Mechanics)), [transitions](https://twohoursonelife.fandom.com/wiki/Transitions_(Mechanics)), [categories](https://twohoursonelife.fandom.com/wiki/Categories_(Mechanics)) to make rule-based changes to them in batch and thoroughly.
 
 # Setup
 
@@ -25,7 +25,7 @@ Root/
 	├── OneLife.exe
 	...
 ```
-Alternatively, if you're not modding and you only have the game folder, you can clone this repo into a `massEditor` folder that sits at the same level as your game folder.
+Alternatively, if you're not modding and you only have the game folder, you can clone this repo into a `massEditor` folder that sits at the same level as your game folder, like this:
 ```
 ├── massEditor/
 	├── massEditor/
@@ -42,7 +42,7 @@ Alternatively, if you're not modding and you only have the game folder, you can 
 
 ### Running the scripts
 
-You can either use the scripts in a terminal (make sure you're in the outer `massEditor` folder. `-h` to see help.):
+You can either use the scripts in a terminal: (Make sure you're in the outer `massEditor` folder. Add `-h` flag at the end to see help.)
 ``` bash
 python -im massEditor
 ```
@@ -55,7 +55,7 @@ from massEditor import *
 
 # Os is shorthand for a ListOfObjects containing all the objects
 # Here we filter all objects for foods
-foods = Os.filter(lambda o: o.foodValue != '0')
+foods = Os.filter(lambda o: o.foodValue.total != 0)
 
 # We can also loop through a ListOfObjects in the way below,
 # in case the filter is too complex for a lambda function
@@ -75,7 +75,7 @@ for id, o in foods.items():
 
 # Sort the results by crafting depths
 # depths is a dict, key being object ids, and value being the crafting depth
-results = results.sort(key=lambda o: depths[int(o.id)])
+results = results.sort(key=lambda o: depths[o.id])
 
 # ListOfObjects prints nicely to read both object ids and names
 print(results)
@@ -113,12 +113,11 @@ This section provides some entry points you can start your script from.
 ``` 
 ### Filter objects by property
 ```python
->>> permanent_objects = Os.filter(lambda o: o.permanent == '1')
+>>> permanent_objects = Os.filter(lambda o: o.permanent == 1)
 ```
 
-[`key()`](https://github.com/risvh/massEditor/blob/main/DOCUMENTATION.md#keyquery) returns all keys an object can potentially have. [`key(queryStr)`](https://github.com/risvh/massEditor/blob/main/DOCUMENTATION.md#keyquery) will help you look for a certain key. 
+[`key()`](https://github.com/risvh/massEditor/blob/main/DOCUMENTATION.md#keyquery) returns all keys an object can potentially have. You can do [`key(queryStr)`](https://github.com/risvh/massEditor/blob/main/DOCUMENTATION.md#keyquery) to look for a certain key.
 
-Note that the object property values are under-parsed, they are either `str`, or `list` of `str` if the same property tag can appear multiple times in an object text file, e.g. `spriteID=`. You can use [`furtherParse()`](https://github.com/risvh/massEditor/blob/main/DOCUMENTATION.md#furtherparsevalue) to parse these `str` values.
 ### Get objects by name
 ```python
 >>> search("cooked pie berry -carrot")
@@ -152,7 +151,7 @@ Note that the object property values are under-parsed, they are either `str`, or
 >>> blocking_nonpermanent_objects = LO() # LO is shorthand for ListOfObjects
 >>> for id, o in O.items(): # O is shorthand for objects
 >>>     if id not in depths.keys(): continue # Skip uncraftable objects
->>>     if o.permanent == '0' and o.blocksWalking == '1':
+>>>     if o.permanent == 0 and o.blocksWalking == 1:
 >>>         blocking_nonpermanent_objects.append(id)
 ```
 ## Start from transitions

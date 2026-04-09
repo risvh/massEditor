@@ -31,6 +31,7 @@ Data stores and Shorthands:
 from . import loader as _loader
 from . import store as _store
 from . import models as _models
+from . import propertyModels as _propertyModels
 from . import logic as _logic
 
 init = _loader.init
@@ -41,6 +42,8 @@ def __getattr__(name):
         return _store.state.__getattribute__(name)
     if name in __all__ and name in  _models.__dict__.keys():
         return _models.__getattribute__(name)
+    if name in __all__ and name in  _propertyModels.__dict__.keys():
+        return _propertyModels.__getattribute__(name)
     if name in __all__ and name in  _logic.__dict__.keys():
         return _logic.__getattribute__(name)
     
@@ -57,11 +60,21 @@ def __getattr__(name):
 __all__ = \
     ["init"] + \
     list(_store.state.__dict__.keys()) + \
+    list(_propertyModels.__dict__.keys()) + \
     [
     'furtherParse',
     'getSpriteContent',
     
     'Pos',
+    # 'GridPos',
+    'TrackedList',
+    'TrackedIndexList',
+    'MapChance',
+    'Sound',
+    'Sounds',
+    'NumSlots',
+    'TapoutTrigger',
+    
     'Object',
     'Sprites',
     'Transition',
@@ -74,7 +87,7 @@ __all__ = \
     'isProbSet',
     'getCategoriesOf',
     
-    'key',
+    'keys',
     'search',
     'make',
     'use',
@@ -87,8 +100,6 @@ __all__ = \
     "getObjectsBySprite",
     "getObjectsBySound",
     
-    "getNumUses",
-    "getUseChance",
     "getAncestors",
     
     "sortObjectsByDepth",

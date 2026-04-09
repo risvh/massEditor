@@ -20,6 +20,6 @@ if __name__ == '__main__':
     # from massEditor import *
     # results = LO() # LO is shorthand for ListOfObjects
     # for id, o in O.items(): # O is shorthand for objects
-    #     if o.permanent == '0' and o.blocksWalking == '1':
+    #     if o.permanent == 0 and o.blocksWalking == 1:
     #         results.append(id)
     # print(results)

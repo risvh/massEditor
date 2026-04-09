@@ -5,6 +5,7 @@ from collections import OrderedDict
 from .config import OUTPUT_PATH
 
 from .util import save_txt, append_txt, read_txt
+from .propertyModels import MapChance, Sound, Sounds, NumSlots, TapoutTrigger, special_types
 from . import store as _store
 
 def objectFileLinesParser(content):
@@ -38,19 +39,14 @@ def objectFileLinesParser(content):
                 odict[tag].append(value)
                 lineNums[tag].append(lineNum)
             else:
-                odict[tag] = value
-                lineNums[tag] = lineNum
+                if tag in _store.state.sprite_tags:
+                    odict[tag] = [value]
+                    lineNums[tag] = [lineNum]
+                else:
+                    odict[tag] = value
+                    lineNums[tag] = lineNum
     
-    return odict, lineNums, lines
-
-list_tags = []
-def lookForListTags():
-    global list_tags
-    if len(list_tags) > 0: return
-    for id, o in _store.state.objects.items():
-        for key in o.keys():
-            if type(o[key]) is list and key not in list_tags:
-                list_tags.append(key)
+    return odict, lineNums, lines        
 
 def furtherParse(value):
     def isFloat(value):
@@ -114,51 +110,120 @@ class Pos(list):
     @property
     def y( self ):
         return self[1]
+    
+# class GridPos(Pos):
+#     def __repr__(self):
+#         return f"{self[0]:.0f},{self[1]:.0f}"
 
-class Object(OrderedDict):
+class TrackedList(list):
+    def __init__(self, items, tag, callback):
+        items = furtherParse(items)
+        super().__init__(items)
+        self.tag = tag
+        self.callback = callback
+
+    def __setitem__(self, index, value):
+        oldValue = self[index]
+        super().__setitem__(index, value)
+        self.callback(self.tag, value, oldValue, index)
     
-    def __getstate__(self): return self.__dict__
-    def __setstate__(self, d): self.__dict__.update(d)
+    def append(self, value):
+        raise NotImplementedError("TrackedList does not support append.")
+        return
+        
+    def pop(self, index=-1):
+        raise NotImplementedError("TrackedList does not support pop.")
+        return
+
+class TrackedIndexList(list):
+    def __init__(self, content, tag, callback):
+        items = [int(e) for e in content.split(',')]
+        if len(items) == 1 and items[0] == -1: items = []
+        super().__init__(items)
+        self.tag = tag
+        self.callback = callback
+        
+    def __repr__(self):
+        if len(self) == 0: return '-1'
+        return ','.join([str(e) for e in self])
     
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+    def __setitem__(self, index, value):
+        oldValue = TrackedIndexList(str(self), self.tag, self.callback)
+        super().__setitem__(index, value)
+        self.callback(self.tag, self, oldValue)
+        
+    def append(self, value):
+        oldValue = TrackedIndexList(str(self), self.tag, self.callback)
+        super().append(value)
+        self.callback(self.tag, self, oldValue)
+        
+    def pop(self, index=-1):
+        oldValue = TrackedIndexList(str(self), self.tag, self.callback)
+        r = super().pop(index)
+        self.callback(self.tag, self, oldValue)
+        return r
+
+class Object():
     
     def __init__(self, content = ""):
         parsed = objectFileLinesParser(content)
-        self.update(parsed[0])
-        super(OrderedDict, self).__setattr__('lineNums', parsed[1])
-        super(OrderedDict, self).__setattr__('lines', parsed[2])
+        
+        super().__setattr__('_raw_dict', parsed[0])
+        super().__setattr__('_lineNums', parsed[1])
+        super().__setattr__('_lines', parsed[2])
+
+        for tag, value in self._raw_dict.items():
+            if len(_store.state.object_property_dataTypes) == 0:
+                super().__setattr__(tag, value)
+            else:
+                dataType = _store.state.object_property_dataTypes[tag]
+                if dataType in [int, float, Pos, str]:
+                    value = dataType( value )
+                elif dataType in [TrackedList, TrackedIndexList]:
+                    value = dataType( value, tag, self.__setattr__ )
+                else:
+                    value = dataType( value, self.__setattr__ )
+                super().__setattr__(tag, value)
     
-    def __getattr__(self, key):
-        r = self[key]
-        if key in list_tags and type(r) is not list: r = [r]
-        return r
+    def __repr__(self):
+        parsed_dict = self._raw_dict.copy()
+        for k, v in parsed_dict.items():
+            parsed_dict[k] = self.__getattribute__(k)
+        import pprint
+        return pprint.pformat(parsed_dict)
     
-    def __setattr__(self, tag, value, index=None):
+    def __setattr__(self, tag, value, oldValue=None, index=None):
         if tag not in self.keys():
             raise KeyError('Tag {} not found in O[{}]. ({})'.format(tag, self.id, self.name))
             return
-        lineNum = self.lineNums[tag]
-        if type(self[tag]) is list and index is not None:
-            oldValue = self[tag][index]
-            self[tag][index] = value
-            lineNum = lineNum[index]
-        elif type(self[tag]) is not list and index is None:
-            oldValue = self[tag]
-            self[tag] = value
-        else:
+        
+        valueType = type(self.__getattribute__(tag))
+        
+        if valueType is TrackedList and index is None:
+            raise TypeError('O[{}].{} is a list. ({})'.format(self.id, tag, self.name))
+            return            
+        elif valueType is not TrackedList and index is not None:
             raise TypeError('O[{}].{} is not a list. ({})'.format(self.id, tag, self.name))
             return
+        elif valueType is TrackedList and index is not None:
+            lineNum = self._lineNums[tag][index]
+        elif type(oldValue) is not TrackedList and index is None:
+            super().__setattr__(tag, value)
+            lineNum = self._lineNums[tag]
+        
+        if type(value) == float:
+            value = f"{value:.6f}"
+        else:
+            value = str(value)
+        
         lhs = f"{tag}="
         if tag == 'name': lhs = ""
-        self.lines[lineNum] = self.lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
-    
-    def change(self, tag, index, value):
-        return self.__setattr__(tag, value, index)
+        self._lines[lineNum] = self._lines[lineNum].replace(f"{lhs}{oldValue}", f"{lhs}{value}")
     
     def __getitem__(self, arg):
         if not isinstance(arg, int) and not isinstance(arg, slice):
-            return super(OrderedDict, self).__getitem__(arg)
+            raise TypeError("list indices must be integers or slices, not str")
+            return
         if isinstance(arg, int):
             arg = [arg]
         if isinstance(arg, slice):
@@ -169,28 +234,27 @@ class Object(OrderedDict):
         a, b = arg[0], arg[-1] + 1
         return self._getSprites(a, b)
     
-    def key(self, query=""):
-        ks = list(self.keys())
+    def keys(self, query=""):
+        ks = list(self._raw_dict.keys())
         ks.sort()
         ks = [e for e in ks if query.lower() in e.lower() or query == ""]
         return ks
         
     def content(self):
-        return "\n".join(self.lines)
+        return "\n".join(self._lines)
     
     def copy(self):
         return Object(self.content())
     
     def linesByTag(self, tag):
-        index = self.lineNums[tag]
+        index = self._lineNums[tag]
         if type(index) is list:
-            return [self.lines[i] for i in index]
+            return [self._lines[i] for i in index]
         else:
-            return self.lines[index]
+            return self._lines[index]
     
     def save(self):
-        id = self['id']
-        path = OUTPUT_PATH / "objects" / f"{id}.txt"
+        path = OUTPUT_PATH / "objects" / f"{self.id}.txt"
         save_txt(self.content(), path)
 #        Path(path/"cache.fcz").unlink(missing_ok=True)
         
@@ -204,25 +268,25 @@ class Object(OrderedDict):
     
     def _getSprites(self, index_start, index_end = None):
         if index_end is None: index_end = index_start + 1
-        spriteID = self.lineNums['spriteID']
+        spriteID = self._lineNums['spriteID']
         if type(spriteID) is int: spriteID = [spriteID]
         a = spriteID[index_start]
         if index_end >= len(self.spriteID):
             if 'headIndex' not in self.keys():
                 raise IndexError('GetSprites index out of range ({}, {}).'.format(index_start, index_end))
-            b = self.lineNums['headIndex']
+            b = self._lineNums['headIndex']
         else:
             b = spriteID[index_end]
         
-        o_copy = Sprites( '\n'.join(self.lines[a:b]) )
-        if type(o_copy['parent']) is list:
-            for i, v in enumerate(o_copy['parent']):
+        o_copy = Sprites( '\n'.join(self._lines[a:b]) )
+        if type(o_copy.parent) is TrackedList:
+            for i, v in enumerate(o_copy.parent):
                 v2 = int(v)
                 if v2 < index_start or v2 >= index_end:
                     v2 = -1
                 else:
                     v2 = v2 - index_start
-                o_copy.__setattr__('parent', str(v2), i)
+                o_copy.__setattr__('parent', v2, v, i)
         return o_copy
     
     def _insertSprites(self, index, new_content):
@@ -241,59 +305,54 @@ class Object(OrderedDict):
         if len(parents) > 1:
             for i, v in enumerate( [int(e) for e in parents] ):
                 if v >= index:
-                    self.__setattr__("parent", str(v + extra_numSprites), i)
+                    self.__setattr__("parent", v + extra_numSprites, v, i)
         parents = partial_object.parent
         if len(parents) > 1:
             for i, v in enumerate( [int(e) for e in parents] ):
                 if v == -1: continue
-                partial_object.__setattr__("parent", str(v + extra_numSprites), i)
+                partial_object.__setattr__("parent", v + extra_numSprites, v, i)
         
         if index >= int(old_numSprites):
-            insertAt_lineNum = self.lineNums['headIndex']
+            insertAt_lineNum = self._lineNums['headIndex']
         else:
-            insertAt_lineNum = self.lineNums['spriteID'][index]
-        lines = self.lines
-        lines[insertAt_lineNum:insertAt_lineNum] = partial_object.lines
+            insertAt_lineNum = self._lineNums['spriteID'][index]
+        lines = self._lines
+        lines[insertAt_lineNum:insertAt_lineNum] = partial_object._lines
         
         content = "\n".join(lines)
         new_object = Object(content)
-        self.update(new_object)
-        self.lineNums.update(new_object.lineNums)
-        self.lines[:] = new_object.lines
+        return new_object
         
     def _removeSprite(self, index):
         
-        removeFrom_lineNum = self.lineNums['spriteID'][index]
+        removeFrom_lineNum = self._lineNums['spriteID'][index]
         if index + 1 >= int(self.numSprites):
-            removeTo_lineNum = self.lineNums['headIndex']
+            removeTo_lineNum = self._lineNums['headIndex']
         else:
-            removeTo_lineNum = self.lineNums['spriteID'][index+1]
-        
-        lines = self.lines
-        lines[removeFrom_lineNum:removeTo_lineNum] = []
-        
-        content = "\n".join(lines)
-        new_object = Object(content)
-        self.update(new_object)
-        self.lineNums.update(new_object.lineNums)
-        self.lines[:] = new_object.lines
+            removeTo_lineNum = self._lineNums['spriteID'][index+1]
         
         self.numSprites = str(int(self.numSprites) - 1)
         
         parents = self.parent
         for i, v in enumerate( [int(e) for e in parents] ):
             if v == index:
-                self.__setattr__("parent", "-1", i)
+                self.__setattr__("parent", -1, v, i)
             elif v > index:
-                self.__setattr__("parent", str(v-1), i)
+                self.__setattr__("parent", v-1, v, i)
+        
+        lines = self._lines
+        lines[removeFrom_lineNum:removeTo_lineNum] = []
+        
+        content = "\n".join(lines)
+        new_object = Object(content)
+        return new_object
+        # self.__dict__.update(new_object.__dict__)
+        # self._lineNums.update(new_object._lineNums)
+        # self._lines[:] = new_object._lines
+        
+
 
 class Sprites(Object):
-    
-    def __init__(self, content):
-        parsed = objectFileLinesParser(content)
-        self.update(parsed[0])
-        super(OrderedDict, self).__setattr__('lineNums', parsed[1])
-        super(OrderedDict, self).__setattr__('lines', parsed[2])
         
     def __len__(self):
         return len(self.spriteID)
@@ -304,7 +363,7 @@ class Sprites(Object):
         parent = self.parent
         ss = ""
         for i in range(len(self)):
-            p = Pos(pos[i])
+            p = pos[i]
             ss += f"{i:2} {parent[i]:2} {p.x:>10.6f},{p.y:>10.6f} {spriteID[i]:6} {getSpriteContent(spriteID[i])}\n"
         return ss
     
@@ -315,13 +374,13 @@ class Sprites(Object):
         if len(other) > len(self): return False
         
         if len(other) == 1:
-            if other["spriteID"] in self.spriteID:
-                indexes = self.index(other["spriteID"])
+            if other.spriteID[0] in self.spriteID:
+                indexes = self.index(other.spriteID[0])
                 for index in indexes:
-                    if other["color"] == self.color[index]:
+                    if other.color[0] == self.color[index]:
                         return True
                     else:
-                        if verbose: print( "Single sprite {} color mismatch {} vs {}.".format(other["spriteID"], other["color"], self.color[index]) )
+                        if verbose: print( "Single sprite {} color mismatch {} vs {}.".format(other.spriteID, other.color, self.color[index]) )
             return False
         
         zeroSprite = other.spriteID[0]
@@ -334,12 +393,12 @@ class Sprites(Object):
             pos0 = other.pos[0]
             minDist = 9999999
             for i1, pos1 in enumerate(self.pos):
-                d = (Pos(pos0) - Pos(pos1)).dist()
+                d = (pos0 - pos1).dist()
                 if d < minDist:
                     minDist = d
                     index1 = i1
         
-        for i0, sprite0 in enumerate(other.gspriteID):
+        for i0, sprite0 in enumerate(other.spriteID):
             if sprite0 not in self.spriteID: return False
             
             found = False
@@ -365,12 +424,12 @@ class Sprites(Object):
         return True
     
     def delta(self, i0, i1):
-        p0 = Pos(self.pos[i0])
-        p1 = Pos(self.pos[i1])
+        p0 = self.pos[i0]
+        p1 = self.pos[i1]
         return p1 - p0
     
     def index(self, id):
-        return [i for i, v in enumerate(self.spriteID) if v == str(id)]
+        return [i for i, v in enumerate(self.spriteID) if v == id]
 
 class Transition():
     
@@ -581,7 +640,7 @@ class Category(ListOfObjects):
 
 
 allKeys = []
-def key(query=""):
+def keys(query=""):
     global allKeys
     if len(allKeys) == 0:
         for id, o in _store.state.objects.items():

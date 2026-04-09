@@ -7,4 +7,7 @@ class State:
         self.raw_transitions = {}
         self.depths = {}
         
+        self.sprite_tags = set()
+        self.object_property_dataTypes = {}
+        
 state = State()
